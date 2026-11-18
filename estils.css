@@ -1,0 +1,52 @@
+/* ============================================================
+   🎨 ESTILS.CSS — EL TEU DOCUMENT DE COLORS DE MARCA
+   ------------------------------------------------------------
+   Puja aquest fitxer a GitHub AL COSTAT de l'index.html.
+   Els valors d'aquí sobreescriuen els de l'app.
+
+   Prioritat dels colors (el de baix guanya):
+     1. Colors base de l'app (a dins de l'index.html)
+     2. Aquest fitxer estils.css
+     3. Pestanya "Config" del Google Sheet (claus color_*)
+
+   Format de color: hexadecimal, ex. #6d4aff
+   (#rrggbb, o #rgb abreujat com #6af)
+   ============================================================ */
+
+:root{
+
+  /* ── Colors generals ─────────────────────────────── */
+  --pri: #6d4aff;                      /* Color principal: capçalera, botons, accents */
+  --fons: #f4f1fc;                     /* Fons general de l'app */
+  --targeta: rgba(255,255,255,.68);    /* Targetes (val rgba per efecte vidre) */
+  --text: #221a44;                     /* Text principal */
+  --muted: #6f6795;                    /* Text secundari */
+
+  /* ── Colors per categoria ────────────────────────── */
+  --c-hotel:      #6d4aff;             /* 🏨 Hotels */
+  --c-activitat:  #e8618c;             /* 🎡 Activitats */
+  --c-transport:  #0ea5a4;             /* 🚆 Transports */
+  --c-botiga:     #e8963c;             /* 🛍️ Botigues */
+  --c-restaurant: #d94f3d;             /* 🍽️ Restaurants */
+  --c-cafeteria:  #8a6440;             /* ☕ Cafeteries */
+}
+
+/* ============================================================
+   PALETA D'EXEMPLE — descomenta un bloc per provar-lo
+   ============================================================ */
+
+/* Exemple: taronja mediterrani
+:root{
+  --pri:#e85d2a;
+  --fons:#fdf3ec;
+  --c-hotel:#e85d2a; --c-activitat:#2a9d8f;
+}
+*/
+
+/* Exemple: verd natura
+:root{
+  --pri:#2f9e63;
+  --fons:#eff8f1;
+  --c-hotel:#2f9e63; --c-transport:#5b8c5a;
+}
+*/
