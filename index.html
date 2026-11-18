@@ -34,6 +34,22 @@ body{
   background-attachment:fixed;
   display:flex;flex-direction:column;
 }
+/* ---------- Pantalla de càrrega ---------- */
+#splash{
+  position:fixed;inset:0;z-index:6000;
+  background:linear-gradient(160deg,#f6f3ff 0%,#fdf1f6 55%,#eff8f7 100%);
+  display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;
+  transition:opacity .45s ease;
+}
+#splash.amaga{opacity:0;pointer-events:none}
+#splash .slogo{
+  width:84px;height:84px;border-radius:26px;display:flex;align-items:center;justify-content:center;
+  font-size:44px;background:linear-gradient(135deg,var(--pri),#a46bff);
+  box-shadow:0 14px 40px rgba(109,74,255,.35);
+}
+#splash .stxt{font-size:15px;font-weight:700;color:var(--muted)}
+#splash .spin{width:26px;height:26px;border-radius:50%;border:3px solid rgba(109,74,255,.2);border-top-color:var(--pri);animation:giro 1s linear infinite}
+@keyframes giro{to{transform:rotate(360deg)}}
 /* ---------- Capçalera aurora ---------- */
 header{
   background:linear-gradient(135deg,rgba(109,74,255,.92),rgba(232,97,140,.82));
@@ -112,28 +128,34 @@ nav button.on{color:var(--pri)}
 .tstop{position:relative;margin-bottom:14px}
 .tstop::before{
   content:"";position:absolute;left:-27.5px;top:14px;width:13px;height:13px;border-radius:50%;
-  background:var(--dot,#6d4aff);border:2.5px solid #fff;box-shadow:0 0 0 3px var(--dot,#6d4aff)33, 0 2px 8px rgba(34,26,68,.25);
+  background:var(--dot,#6d4aff);border:2.5px solid #fff;box-shadow:0 0 0 3px rgba(109,74,255,.2), 0 2px 8px rgba(34,26,68,.25);
 }
 .tstop .thora{font-size:12px;font-weight:800;color:var(--dot,#6d4aff)}
 /* ---------- Avís ---------- */
 .aviso{position:absolute;left:12px;right:12px;top:12px;z-index:1500;
   background:rgba(255,244,229,.95);backdrop-filter:blur(10px);color:#8a5a00;border-radius:14px;padding:10px 14px;font-size:13px;font-weight:600;
   box-shadow:0 6px 20px rgba(34,26,68,.15);display:none;max-height:40vh;overflow-y:auto}
-/* ---------- Fitxa detall (finestra separada en tocar un pin) ---------- */
+/* ---------- Fitxa detall (finestra separada en tocar un pin) ----------
+   Dos estats: col·lapsada (mitja pantalla) i expandida (gairebé tota).
+   Gestos: lliscar AMUNT → expandir · lliscar AVALL → tancar          */
 #fitxa{position:fixed;inset:0;z-index:3000;display:none;align-items:flex-end;justify-content:center}
 #fitxa.open{display:flex}
 #fitxa .fons{position:absolute;inset:0;background:rgba(34,26,68,.45);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
 #fitxa .full{
-  position:relative;width:100%;max-width:560px;max-height:86vh;overflow-y:auto;
-  background:rgba(255,255,255,.92);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  position:relative;width:100%;max-width:560px;max-height:62vh;overflow-y:auto;overscroll-behavior:contain;
+  background:rgba(255,255,255,.94);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
   border-radius:26px 26px 0 0;box-shadow:0 -12px 40px rgba(34,26,68,.3);
-  animation:puge .28s ease;padding-bottom:calc(24px + env(safe-area-inset-bottom));
+  transition:max-height .28s ease, transform .2s ease;
+  padding-bottom:calc(24px + env(safe-area-inset-bottom));
+  touch-action:pan-y;
 }
+#fitxa.expans .full{max-height:94vh}
 @keyframes puge{from{transform:translateY(60px);opacity:.4}to{transform:none;opacity:1}}
-#fitxa .agarra{width:44px;height:5px;border-radius:3px;background:rgba(34,26,68,.18);margin:12px auto 0}
+#fitxa .full.anim{animation:puge .28s ease}
+#fitxa .agarra{width:44px;height:5px;border-radius:3px;background:rgba(34,26,68,.18);margin:12px auto 4px}
 #fitxa .tanca{position:absolute;top:14px;right:14px;border:none;width:36px;height:36px;border-radius:50%;
   background:rgba(34,26,68,.08);color:var(--muted);font-size:17px;font-weight:800;cursor:pointer;z-index:2}
-#fitxa .fh{display:flex;align-items:center;gap:14px;padding:18px 22px 6px}
+#fitxa .fh{display:flex;align-items:center;gap:14px;padding:10px 22px 6px;cursor:grab}
 #fitxa .femoji{width:58px;height:58px;border-radius:18px;display:flex;align-items:center;justify-content:center;
   font-size:30px;color:#fff;flex-shrink:0;box-shadow:0 6px 18px rgba(34,26,68,.25)}
 #fitxa .ftitul{font-size:20px;font-weight:800;line-height:1.25}
@@ -176,8 +198,15 @@ nav button.on{color:var(--pri)}
 </head>
 <body class="view-map">
 
+<!-- Pantalla de càrrega (es modifiqui amb la imatge final més endavant) -->
+<div id="splash">
+  <div class="slogo">🧳</div>
+  <div class="stxt" id="splash-txt">Preparant el viatge…</div>
+  <div class="spin"></div>
+</div>
+
 <!-- Porta de contrasenya -->
-<div id="gate">
+<div id="gate" style="display:none">
   <div class="gbox">
     <div class="gmasc">🔐</div>
     <h2>Zona privada del viatge</h2>
@@ -212,10 +241,10 @@ nav button.on{color:var(--pri)}
 <!-- Finestra de detall del lloc -->
 <div id="fitxa">
   <div class="fons" id="f-tancar-fons"></div>
-  <div class="full">
-    <div class="agarra"></div>
+  <div class="full anim" id="f-full">
+    <div class="agarra" id="f-agarra"></div>
     <button class="tanca" id="f-tancar">✕</button>
-    <div class="fh">
+    <div class="fh" id="f-cap">
       <div class="femoji" id="f-emoji"></div>
       <div style="min-width:0">
         <div class="ftitul" id="f-nom"></div>
@@ -240,6 +269,21 @@ const SHEET_ID = "1tUIidz7rAFAQPBprGGwYSljTZ0styLm6aFFozYILFAs";
 const PASSWORD = "LaCasita";
 const AUTH_KEY = "viatge_auth_v1";
 const AUTH_DIES = 30;
+
+/* ---------- Estils de mapa disponibles ---------- */
+const ESTILS = {
+  local:{ nom:"🗾 Noms locals (actual)",
+          url:"https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+          attr:"&copy; OpenStreetMap" },
+  llati:{ nom:"🌐 Noms en lletres llatines",
+          url:"https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+          attr:"&copy; OpenStreetMap &copy; CARTO", subdomains:"abcd" },
+  cata: { nom:"🏡 Català (Països Catalans)",
+          url:"https://tile.osm.cat/{z}/{x}/{y}.png",
+          attr:"&copy; OpenStreetMap · osm.cat" },
+};
+const ESTIL_DEFECTE = "local";
+let capaBase = null;
 
 /* ---------- Categories: colors lligats a les variables CSS ---------- */
 const CATS = {
@@ -423,7 +467,17 @@ function passaFiltre(p){
 
 /* ---------- Mapa ---------- */
 const map = L.map('map').setView(CONFIG.centre, CONFIG.zoom);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
+function setEstil(id){
+  const e = ESTILS[id] || ESTILS[ESTIL_DEFECTE];
+  if(capaBase) map.removeLayer(capaBase);
+  capaBase = L.tileLayer(e.url, {maxZoom:19, attribution:e.attr, subdomains:e.subdomains||"abc"}).addTo(map);
+  try{ localStorage.setItem("viatge_estil_mapa", id); }catch(err){}
+}
+setEstil(localStorage.getItem("viatge_estil_mapa") || ESTIL_DEFECTE);
+L.control.layers(
+  Object.fromEntries(Object.entries(ESTILS).map(([k,e])=>[e.nom, capaBase])) ,
+  null, {position:"bottomright"}
+);
 
 function icona(cat){
   const c = CATS[cat]||{emoji:"📍",color:"#888"};
@@ -441,8 +495,11 @@ function refrescaMarcadors(){
   });
 }
 
-/* ---------- Fitxa de detall ---------- */
+/* ---------- Fitxa de detall amb gestos ---------- */
 const fitxa = document.getElementById('fitxa');
+const fFull = document.getElementById('f-full');
+let dragY=null, dragActiu=false;
+
 function obreFitxa(i){
   const p = PLACES[i];
   if(!p) return;
@@ -463,10 +520,38 @@ function obreFitxa(i){
   acc += `<button class="f-acc-sec" onclick="copiaCoords(${i})">📋 Coordenades</button>`;
   document.getElementById('f-accions').innerHTML = acc;
   fitxa.classList.add('open');
+  fitxa.classList.remove('expans');
+  fFull.scrollTop = 0;
+  fFull.classList.remove('anim'); void fFull.offsetWidth; fFull.classList.add('anim');
 }
-function tancaFitxa(){ fitxa.classList.remove('open'); }
+function tancaFitxa(){ fitxa.classList.remove('open','expans'); fFull.style.transform=""; }
 document.getElementById('f-tancar').onclick = tancaFitxa;
 document.getElementById('f-tancar-fons').onclick = tancaFitxa;
+document.getElementById('f-agarra').onclick = ()=>fitxa.classList.toggle('expans');
+document.getElementById('f-cap').onclick = (e)=>{ if(e.target.closest('a,button')) return; fitxa.classList.toggle('expans'); };
+
+/* Gestos: lliscar amunt = expandir · lliscar avall = tancar */
+fFull.addEventListener('touchstart', e=>{
+  dragY = e.touches[0].clientY; dragActiu = true;
+}, {passive:true});
+fFull.addEventListener('touchmove', e=>{
+  if(!dragActiu || dragY===null) return;
+  const dy = e.touches[0].clientY - dragY;
+  const aDalt = fFull.scrollTop <= 0;
+  const pucTancar = (!fitxa.classList.contains('expans')) || aDalt;
+  if(dy < -40){                       // lliscar AMUNT → expandir
+    fitxa.classList.add('expans'); dragActiu=false; fFull.style.transform="";
+  }else if(dy > 50 && pucTancar){     // lliscar AVALL → tancar
+    dragActiu=false; fFull.style.transform="";
+    tancaFitxa();
+  }else if((dy>0 && pucTancar) || dy<0){
+    fFull.style.transform = `translateY(${dy/2}px)`;
+  }
+}, {passive:true});
+fFull.addEventListener('touchend', ()=>{
+  dragActiu=false; dragY=null; fFull.style.transform="";
+}, {passive:true});
+
 window.copiaCoords = function(i){
   const p = PLACES[i];
   navigator.clipboard?.writeText(`${p.lat}, ${p.lng}`).then(
@@ -475,12 +560,13 @@ window.copiaCoords = function(i){
   );
 };
 
-/* ---------- Llistes ---------- */
+/* ---------- Llistes (corregit: cada categoria només mostra els SEUS llocs) ---------- */
 function refrescaLlistes(){
   let h="";
   Object.entries(CATS).forEach(([k,c])=>{
     if(!filtreCat.has(k)) return;
-    const llocs=PLACES.map((p,i)=>({p,i})).filter(o=>passaFiltre(o.p))
+    const llocs=PLACES.map((p,i)=>({p,i}))
+      .filter(o=>o.p.cat===k && passaFiltre(o.p))
       .sort((a,b)=>(a.p.dia||"zzz").localeCompare(b.p.dia||"zzz"));
     if(!llocs.length) return;
     h+=`<div class="cat-title"><span class="dot" style="background:${c.color};color:${c.color}"></span>${c.nom} <small>(${llocs.length})</small></div>`;
@@ -547,6 +633,23 @@ function refrescaTot(){
 
 /* ---------- Filtres ---------- */
 const fCont = document.getElementById('filtres');
+
+/* Botó "Mostra-ho tot" (un sol click) */
+const bTotes=document.createElement('button');
+bTotes.className='chip on';
+bTotes.textContent='✨ Tot';
+bTotes.title="Mostra totes les categories i tots els dies";
+bTotes.onclick=()=>{
+  filtreCat = new Set(Object.keys(CATS));
+  document.querySelectorAll('#filtres .chip[data-k]').forEach(b=>{
+    b.classList.add('on');
+    b.style.background = CATS[b.dataset.k].color;
+  });
+  diaFiltre="tots"; selDia.value="tots";
+  refrescaTot();
+};
+fCont.appendChild(bTotes);
+
 Object.entries(CATS).forEach(([k,c])=>{
   const b=document.createElement('button');
   b.className='chip on'; b.style.background=c.color;
@@ -565,6 +668,16 @@ selDia.title="Filtra per dia";
 selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>`;
 selDia.onchange=()=>{ diaFiltre=selDia.value; refrescaTot(); };
 fCont.appendChild(selDia);
+
+/* Selector d'estil de mapa */
+const selEstil=document.createElement('select');
+selEstil.className='chip';
+selEstil.title="Estil del mapa";
+selEstil.innerHTML=Object.entries(ESTILS).map(([k,e])=>`<option value="${k}">${e.nom}</option>`).join("");
+selEstil.value = localStorage.getItem("viatge_estil_mapa") || ESTIL_DEFECTE;
+selEstil.onchange=()=>setEstil(selEstil.value);
+fCont.appendChild(selEstil);
+
 function refrescaDies(){
   const dies=[...new Set(PLACES.map(p=>grupDeDia(p.dia)).filter(d=>d!=="(sense dia)"))];
   const previ=diaFiltre;
@@ -592,6 +705,13 @@ function avisa(html, ms){
   a.innerHTML=html; a.style.display='block';
   if(ms) setTimeout(()=>a.style.display='none',ms);
 }
+
+/* ---------- Pantalla de càrrega ---------- */
+const splash=document.getElementById('splash');
+function mostraSplash(){ splash.classList.remove('amaga'); }
+function amagaSplash(){ splash.classList.add('amaga'); }
+/* Seguretat: mai més de 12 segons carregant */
+setTimeout(amagaSplash, 12000);
 
 /* ---------- Sincro ---------- */
 async function sincro(){
@@ -625,6 +745,7 @@ async function sincro(){
   PLACES = [...PLACES_SHEET];
   refrescaDies();
   refrescaTot();
+  amagaSplash();
 }
 
 /* ---------- Porta de contrasenya ---------- */
@@ -642,21 +763,27 @@ function marcaAutoritzat(){
 }
 (function iniciaGate(){
   const gate=document.getElementById('gate');
-  if(jaAutoritzat()){ gate.remove(); sincro(); return; }
-  document.getElementById('g-btn').onclick = ()=>{
-    const v = document.getElementById('g-pass').value.trim();
-    if(v === PASSWORD){
-      marcaAutoritzat();
-      gate.remove();
-      sincro();
-    }else{
-      document.getElementById('g-err').style.display='block';
-      document.getElementById('g-pass').value='';
-    }
-  };
-  document.getElementById('g-pass').addEventListener('keydown', e=>{
-    if(e.key==='Enter') document.getElementById('g-btn').click();
-  });
+  if(jaAutoritzat()){
+    sincro();               // la pantalla de càrrega tapa l'app fins que hi ha dades
+  }else{
+    amagaSplash();          // la porta cobreix tota la pantalla de totes maneres
+    gate.style.display='flex';
+    document.getElementById('g-btn').onclick = ()=>{
+      const v = document.getElementById('g-pass').value.trim();
+      if(v === PASSWORD){
+        marcaAutoritzat();
+        gate.style.display='none';
+        mostraSplash();     // tapa el mapa mentre es sincronitza
+        sincro();
+      }else{
+        document.getElementById('g-err').style.display='block';
+        document.getElementById('g-pass').value='';
+      }
+    };
+    document.getElementById('g-pass').addEventListener('keydown', e=>{
+      if(e.key==='Enter') document.getElementById('g-btn').click();
+    });
+  }
 })();
 </script>
 </body>
