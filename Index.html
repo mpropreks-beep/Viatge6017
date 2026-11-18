@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#6d4aff">
+<title>Viatge — Mapa del viatge</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root{
+    --pri:#6d4aff; --bg:#f7f6fb; --card:#ffffff; --txt:#1c1730; --mut:#7a7391;
+    --radius:14px; --shadow:0 2px 10px rgba(28,23,48,.08);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--txt);overflow:hidden}
+  body{display:flex;flex-direction:column}
+  header{background:var(--pri);color:#fff;padding:14px 16px calc(10px + env(safe-area-inset-top));padding-top:calc(10px + env(safe-area-inset-top));flex:none}
+  h1{font-size:19px;font-weight:800;letter-spacing:.2px}
+  .dates{font-size:13px;opacity:.85;margin-top:2px}
+  .sincc{font-size:11.5px;opacity:.75;margin-top:4px}
+  .counts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .counts span{background:rgba(255,255,255,.18);border-radius:20px;padding:3px 9px;font-size:12px}
+  .filters{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;scrollbar-width:none;background:var(--bg);flex:none;align-items:center}
+  .filters::-webkit-scrollbar{display:none}
+  .chip{flex-shrink:0;border:none;border-radius:22px;padding:7px 13px;font-size:13.5px;font-weight:600;
+        background:var(--card);color:var(--mut);box-shadow:var(--shadow);cursor:pointer;transition:.15s}
+  .chip.on{color:#fff}
+  select.chip{appearance:none;-webkit-appearance:none;font-family:inherit;outline:none;max-width:220px;white-space:nowrap}
+  #content{flex:1;position:relative;overflow:hidden}
+  #map{position:absolute;top:0;left:0;right:0;bottom:56px;display:none}
+  body.view-map #map{display:block}
+  body.view-map .main{display:none}
+  .main{position:absolute;top:0;left:0;right:0;bottom:56px;overflow-y:auto;padding:4px 12px 24px}
+  .pin{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50% 50% 50% 4px;
+       transform:rotate(-45deg);border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);font-size:16px}
+  .pin > span{transform:rotate(45deg)}
+  .cat-title{display:flex;align-items:center;gap:8px;font-size:17px;font-weight:800;margin:16px 2px 8px}
+  .cat-title .dot{width:12px;height:12px;border-radius:50%}
+  .cat-title small{color:var(--mut);font-weight:600;font-size:13px}
+  .item{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;margin-bottom:10px;
+        display:flex;gap:11px;align-items:flex-start}
+  .item .ico{font-size:22px;line-height:1.2;flex-shrink:0}
+  .item b{font-size:15px}
+  .item p{font-size:13px;color:var(--mut);margin-top:2px;white-space:pre-line}
+  .item .meta{font-size:12px;color:var(--pri);font-weight:700;margin-top:4px}
+  .item .go{margin-left:auto;flex-shrink:0;border:none;background:#efeaff;color:var(--pri);border-radius:10px;
+            padding:8px 10px;font-size:15px;font-weight:700;cursor:pointer}
+  nav{position:absolute;left:0;right:0;bottom:0;height:56px;background:var(--card);display:flex;
+      border-top:1px solid #e8e5f2;padding-bottom:env(safe-area-inset-bottom);z-index:1200}
+  nav button{flex:1;border:none;background:none;font-size:11.5px;font-weight:700;color:var(--mut);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+  nav button .ni{font-size:20px}
+  nav button.on{color:var(--pri)}
+  /* ---------- Vista escriptori: mapa + llistes en paral·lel ---------- */
+  @media (min-width:900px){
+    #map{right:42%;display:block !important;bottom:0}
+    .main{left:58%;display:block !important;bottom:0;border-left:1px solid #e8e5f2}
+    nav{display:none}
+  }
+  /* ---------- Avisos ---------- */
+  .aviso{position:absolute;left:12px;right:12px;top:12px;z-index:1500;
+         background:#fff4e5;color:#8a5a00;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:600;
+         box-shadow:var(--shadow);display:none;max-height:40vh;overflow-y:auto}
+  /* ---------- Porta de contrasenya ---------- */
+  #gate{position:fixed;inset:0;background:linear-gradient(160deg,#6d4aff,#8f6bff);display:flex;
+        align-items:center;justify-content:center;z-index:5000;padding:20px}
+  #gate .gbox{background:#fff;border-radius:20px;padding:28px 24px;max-width:380px;width:100%;
+              box-shadow:0 10px 40px rgba(28,23,48,.35);text-align:center}
+  #gate .gmasc{font-size:44px}
+  #gate h2{font-size:18px;font-weight:800;margin:10px 0 4px}
+  #gate p{font-size:13.5px;color:var(--mut);margin-bottom:16px}
+  #gate input{width:100%;border:1.5px solid #ddd8ee;border-radius:12px;padding:13px 14px;font-size:16px;
+              text-align:center;letter-spacing:2px;background:#fbfaff;outline:none}
+  #gate input:focus{border-color:var(--pri)}
+  #gate .err{color:#d94f3d;font-size:13px;font-weight:700;margin-top:10px;display:none}
+  #gate button{width:100%;margin-top:14px;border:none;background:var(--pri);color:#fff;border-radius:12px;
+               padding:13px;font-size:15.5px;font-weight:800;cursor:pointer}
+  #gate button:active{transform:scale(.98)}
+</style>
+</head>
+<body class="view-map">
+
+<!-- Porta de contrasenya -->
+<div id="gate">
+  <div class="gbox">
+    <div class="gmasc">🔐</div>
+    <h2>Zona privada del viatge</h2>
+    <p>Introdueix la contrasenya per veure el mapa i les llistes.</p>
+    <input type="password" id="g-pass" placeholder="Contrasenya" autocomplete="off">
+    <div class="err" id="g-err">Contrasenya incorrecta, torna-ho a provar.</div>
+    <button id="g-btn">Entrar</button>
+  </div>
+</div>
+
+<header>
+  <h1 id="titol"></h1>
+  <div class="dates" id="dates"></div>
+  <div class="sincc" id="sincc"></div>
+  <div class="counts" id="counts"></div>
+</header>
+
+<div class="filters" id="filtres"></div>
+
+<div id="content">
+  <div class="aviso" id="aviso"></div>
+  <div id="map"></div>
+  <div class="main" id="llistes"></div>
+  <nav>
+    <button id="tab-map" class="on"><span class="ni">🗺️</span>Mapa</button>
+    <button id="tab-llis"><span class="ni">📋</span>Llistes</button>
+  </nav>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ============================================================
+   ⚙️ CONEXIÓ AMB EL GOOGLE SHEETS (LA BASE DE DADES)  ✅ CONNECTAT
+   Full: "El secreto de Puente Viejo"
+   Pestanyes: "Llocs" (Nom,Categoria,Lat,Lng,Dia,Nota,Link)
+              "Config" (Clau,Valor)
+   ============================================================ */
+const SHEET_ID = "1tUIidz7rAFAQPBprGGwYSljTZ0styLm6aFFozYILFAs";
+
+/* ---------- Contrasenya ---------- */
+const PASSWORD = "LaCasita";
+const AUTH_KEY = "viatge_auth_v1";
+const AUTH_DIES = 30; /* dies que es recorda l'autorització */
+
+/* ---------- Categories (no canvies les claus) ---------- */
+const CATS = {
+  hotel:      {emoji:"🏨", nom:"Hotels",     color:"#6d4aff"},
+  activitat:  {emoji:"🎡", nom:"Activitats", color:"#e8618c"},
+  transport:  {emoji:"🚆", nom:"Transports", color:"#0ea5a4"},
+  botiga:     {emoji:"🛍️", nom:"Botigues",   color:"#e8963c"},
+  restaurant: {emoji:"🍽️", nom:"Restaurants",color:"#d94f3d"},
+  cafeteria:  {emoji:"☕", nom:"Cafeteries", color:"#8a6440"},
+};
+
+/* ---------- Exemple (només si tot falla i no hi ha cau) ---------- */
+const PLACES_EXEMPLE = [
+  {nom:"Hotel Mar", cat:"hotel", lat:38.7223, lng:-9.1393, dia:"Dl 12 · check-in 15h", nota:"Habitació doble", link:""},
+];
+
+/* ============================================================
+   —— A partir d'aquí no cal tocar res ——
+   ============================================================ */
+const LS_CACHE  = "viatge_sheet_cache";
+const LS_CONFIG = "viatge_config_cache";
+
+let CONFIG = { nom:"Viatge", dates:"", centre:[38.72,-9.14], zoom:13 };
+let PLACES_SHEET = [];
+let PLACES = [];
+let filtreCat = new Set(Object.keys(CATS));
+let diaFiltre = "tots";   /* "tots" o un valor concret de la columna Dia */
+let marcadors = {};
+
+/* ---------- Utilitats ---------- */
+function normalitzaCat(v){
+  const s = String(v||"").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/s$/,"");
+  return CATS[s] ? s : null;
+}
+function num(v){ const n=parseFloat(String(v).replace(",",".")); return isNaN(n)?null:n; }
+
+function parseCSV(text){
+  const rows=[]; let row=[], cell="", q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else q=false; }
+      else cell+=c;
+    }else{
+      if(c==='"') q=true;
+      else if(c===','){ row.push(cell); cell=""; }
+      else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n')i++; row.push(cell); cell="";
+        if(row.some(x=>x!=="")) rows.push(row); row=[]; }
+      else cell+=c;
+    }
+  }
+  row.push(cell); if(row.some(x=>x!=="")) rows.push(row);
+  return rows;
+}
+
+function cap(url){
+  return fetch(url, {redirect:"follow"}).then(r=>{
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.text();
+  });
+}
+
+/* ============================================================
+   VIES DE CONNEXIÓ (es proven en ordre):
+   1. gviz CSV de Google
+   2. JSONP via callback del gviz (evita bloquejos CORS)
+   3. API pública OpenSheet
+   ============================================================ */
+
+async function viaGviz(nom){
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(nom)}`;
+  const txt = await cap(url);
+  if(txt.includes("<HTML") || txt.toLowerCase().includes("<!doctype html")) throw new Error("resposta HTML (full no públic?)");
+  return txt;
+}
+
+function viaJsonp(nom, timeoutMs=8000){
+  return new Promise((resolve,reject)=>{
+    const cb = "__gvis_cb_"+Date.now();
+    const s = document.createElement('script');
+    const t = setTimeout(()=>{ neteja(); reject(new Error("timeout")); }, timeoutMs);
+    function neteja(){ clearTimeout(t); delete window[cb]; s.remove(); }
+    window[cb] = (json)=>{
+      neteja();
+      try{
+        const cols = (json.table.cols||[]).map(c=>String(c.label||"").trim().toLowerCase());
+        const rows = (json.table.rows||[]).map(r=>(r.c||[]).map(c=>c?String(c.v??""):""));
+        resolve({cols, rows});
+      }catch(e){ reject(e); }
+    };
+    s.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:${cb}&sheet=${encodeURIComponent(nom)}`;
+    s.onerror = ()=>{ neteja(); reject(new Error("script error")); };
+    document.head.appendChild(s);
+  });
+}
+
+async function viaOpenSheet(nom){
+  const url = `https://opensheet.elk.sh/${SHEET_ID}/${encodeURIComponent(nom)}`;
+  const txt = await cap(url);
+  const d = JSON.parse(txt);
+  if(!Array.isArray(d)) throw new Error("format inesperat");
+  return d;
+}
+
+/* ---- Normalitzadors ---- */
+function rowsCsvAPlaces(csvTxt){
+  const rows = parseCSV(csvTxt);
+  const head = (rows.shift()||[]).map(h=>String(h).trim().toLowerCase());
+  const idx = n => head.indexOf(n);
+  return rows.map(r=>({
+    nom:  r[idx("nom")]||"",
+    cat:  normalitzaCat(r[idx("categoria")]),
+    lat:  num(r[idx("lat")]),
+    lng:  num(r[idx("lng")]),
+    dia:  r[idx("dia")]||"",
+    nota: r[idx("nota")]||"",
+    link: r[idx("link")]||"",
+  })).filter(p=>p.nom && p.cat && p.lat!==null && p.lng!==null);
+}
+function csvAConfig(csvTxt){
+  const config = {};
+  parseCSV(csvTxt).forEach(r=>{ if(r[0]) config[String(r[0]).trim()] = (r[1]||"").trim(); });
+  return config;
+}
+function jsonpAPlaces(cols, rows){
+  const idx = n => cols.indexOf(n);
+  return rows.map(r=>({
+    nom:  r[idx("nom")]||"",
+    cat:  normalitzaCat(r[idx("categoria")]),
+    lat:  num(r[idx("lat")]),
+    lng:  num(r[idx("lng")]),
+    dia:  r[idx("dia")]||"",
+    nota: r[idx("nota")]||"",
+    link: r[idx("link")]||"",
+  })).filter(p=>p.nom && p.cat && p.lat!==null && p.lng!==null);
+}
+function jsonpAConfig(cols, rows){
+  const config = {}; const iC=cols.indexOf("clau"), iV=cols.indexOf("valor");
+  if(iC>=0) rows.forEach(r=>{ if(r[iC]) config[String(r[iC]).trim()]=(r[iV]||"").trim(); });
+  return config;
+}
+function objesAPlaces(objes){
+  return objes.map(o=>({
+    nom:  o["Nom"]||o["nom"]||"",
+    cat:  normalitzaCat(o["Categoria"]||o["categoria"]),
+    lat:  num(o["Lat"]??o["lat"]),
+    lng:  num(o["Lng"]??o["lng"]),
+    dia:  o["Dia"]||o["dia"]||"",
+    nota: o["Nota"]||o["nota"]||"",
+    link: o["Link"]||o["link"]||"",
+  })).filter(p=>p.nom && p.cat && p.lat!==null && p.lng!==null);
+}
+
+async function carregaPestanyaLlocs(){
+  const intents = [];
+  try{ return rowsCsvAPlaces(await viaGviz("Llocs")); }
+  catch(e){ intents.push("gviz-csv: "+e.message); }
+  try{
+    const {cols, rows} = await viaJsonp("Llocs");
+    const places = jsonpAPlaces(cols, rows);
+    if(places.length || rows.length) return places;
+    throw new Error("buit");
+  }catch(e){ intents.push("gviz-jsonp: "+e.message); }
+  try{ return objesAPlaces(await viaOpenSheet("Llocs")); }
+  catch(e){ intents.push("opensheet: "+e.message); }
+  throw new Error(intents.join(" · "));
+}
+async function carregaPestanyaConfig(){
+  try{ return csvAConfig(await viaGviz("Config")); }catch(e){}
+  try{
+    const {cols, rows} = await viaJsonp("Config");
+    return jsonpAConfig(cols, rows);
+  }catch(e){}
+  try{
+    const objes = await viaOpenSheet("Config");
+    const config = {};
+    objes.forEach(o=>{ const k=o["Clau"]||o["clau"]; if(k) config[k.trim()]=(o["Valor"]||o["valor"]||"").trim(); });
+    return config;
+  }catch(e){}
+  return null;
+}
+
+function aplicaConfig(cfg){
+  if(!cfg) return;
+  const lat=num(cfg["centre_lat"]), lng=num(cfg["centre_lng"]);
+  CONFIG = {
+    nom:   cfg["nom"]  || CONFIG.nom,
+    dates: cfg["dates"]|| CONFIG.dates,
+    centre:[ lat!==null?lat:CONFIG.centre[0], lng!==null?lng:CONFIG.centre[1] ],
+    zoom:  num(cfg["zoom"]) ?? CONFIG.zoom,
+  };
+}
+
+/* ---------- Filtratge ---------- */
+function passaFiltre(p){
+  if(!filtreCat.has(p.cat)) return false;
+  if(diaFiltre!=="tots" && (p.dia||"")!==diaFiltre) return false;
+  return true;
+}
+
+/* ---------- Mapa ---------- */
+const map = L.map('map').setView(CONFIG.centre, CONFIG.zoom);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
+
+function icona(cat){
+  const c = CATS[cat]||{emoji:"📍",color:"#888"};
+  return L.divIcon({className:"", html:`<div class="pin" style="background:${c.color}"><span>${c.emoji}</span></div>`,
+    iconSize:[34,34], iconAnchor:[17,32], popupAnchor:[0,-30]});
+}
+function popupHtml(p){
+  const c=CATS[p.cat]||{emoji:"📍",color:"#888"};
+  let h=`<div style="min-width:190px"><div style="font-weight:800;font-size:15px;margin-bottom:2px">${c.emoji} ${p.nom}</div>`;
+  if(p.dia) h+=`<div style="color:${c.color};font-weight:700;font-size:12.5px;margin:3px 0">${p.dia}</div>`;
+  if(p.nota) h+=`<div style="font-size:13px;color:#555;margin:4px 0;white-space:pre-line">${p.nota}</div>`;
+  h+=`<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">`;
+  if(p.link) h+=`<a href="${p.link}" target="_blank" style="background:${c.color};color:#fff;text-decoration:none;padding:7px 12px;border-radius:9px;font-size:13px;font-weight:700">Obrir enllaç</a>`;
+  h+=`<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}" target="_blank" style="background:#efeaff;color:#6d4aff;text-decoration:none;padding:7px 12px;border-radius:9px;font-size:13px;font-weight:700">Ani-hi</a>`;
+  h+=`</div></div>`;
+  return h;
+}
+function refrescaMarcadors(){
+  Object.values(marcadors).forEach(m=>map.removeLayer(m));
+  marcadors={};
+  PLACES.forEach((p,i)=>{
+    if(!passaFiltre(p)) return;
+    marcadors[i]=L.marker([p.lat,p.lng],{icon:icona(p.cat)}).addTo(map).bindPopup(popupHtml(p));
+  });
+}
+function refrescaLlistes(){
+  let h="";
+  Object.entries(CATS).forEach(([k,c])=>{
+    if(!filtreCat.has(k)) return;
+    const llocs=PLACES.map((p,i)=>({p,i})).filter(o=>passaFiltre(o.p))
+      .sort((a,b)=>(a.p.dia||"zzz").localeCompare(b.p.dia||"zzz"));
+    if(!llocs.length) return;
+    h+=`<div class="cat-title"><span class="dot" style="background:${c.color}"></span>${c.nom} <small>(${llocs.length})</small></div>`;
+    llocs.forEach(({p,i})=>{
+      h+=`<div class="item"><div class="ico">${c.emoji}</div><div style="flex:1;min-width:0"><b>${p.nom}</b>${p.nota?`<p>${p.nota}</p>`:""}${p.dia?`<div class="meta">📅 ${p.dia}</div>`:""}</div><button class="go" onclick="vesA(${i})">🗺️</button></div>`;
+    });
+  });
+  document.getElementById('llistes').innerHTML = h || `<p style="text-align:center;color:var(--mut);margin-top:40px">Cap lloc amb els filtres actius 🙂</p>`;
+}
+function vesA(i){
+  document.body.className='view-map'; setTab(true);
+  map.closePopup(); map.flyTo([PLACES[i].lat,PLACES[i].lng],16,{duration:.8});
+  setTimeout(()=>marcadors[i]&&marcadors[i].openPopup(),850);
+}
+window.vesA=vesA;
+function refrescaTot(){
+  refrescaMarcadors(); refrescaLlistes();
+  const visibles = PLACES.filter(passaFiltre).length;
+  document.getElementById('counts').innerHTML =
+    `<span>👁️ ${visibles} visibles</span>` +
+    Object.entries(CATS).map(([k,x])=>{
+      const n = PLACES.filter(p=>p.cat===k && (diaFiltre==="tots" || p.dia===diaFiltre)).length;
+      return `<span>${x.emoji} ${n}</span>`;
+    }).join("");
+  document.getElementById('titol').textContent = CONFIG.nom;
+  document.getElementById('dates').textContent = CONFIG.dates;
+  document.getElementById('sincc').textContent = PLACES_SHEET.length
+    ? `🔗 Sincronitzat amb Google Sheets · ${new Date().toLocaleString('ca-ES')}`
+    : "⚠️ Sense dades del Sheet";
+}
+
+/* ---------- Filtres (categories + dia) ---------- */
+const fCont = document.getElementById('filtres');
+Object.entries(CATS).forEach(([k,c])=>{
+  const b=document.createElement('button');
+  b.className='chip on'; b.style.background=c.color;
+  b.textContent=`${c.emoji} ${c.nom}`;
+  b.onclick=()=>{
+    if(filtreCat.has(k)){filtreCat.delete(k);b.classList.remove('on');b.style.background='';}
+    else{filtreCat.add(k);b.classList.add('on');b.style.background=c.color;}
+    refrescaTot();
+  };
+  fCont.appendChild(b);
+});
+/* Selector de dia (s'omple quan arriben les dades) */
+const selDia=document.createElement('select');
+selDia.className='chip';
+selDia.title="Filtra per dia";
+selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>`;
+selDia.onchange=()=>{ diaFiltre=selDia.value; refrescaTot(); };
+fCont.appendChild(selDia);
+
+function refrescaDies(){
+  const dies=[...new Set(PLACES.map(p=>p.dia).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b));
+  const previ=diaFiltre;
+  selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>` +
+    dies.map(d=>`<option value="${d.replace(/"/g,"&quot;")}">${d}</option>`).join("");
+  if(dies.includes(previ)) selDia.value=previ; else { diaFiltre="tots"; selDia.value="tots"; }
+}
+
+/* ---------- Tabs ---------- */
+function setTab(m){
+  document.getElementById('tab-map').classList.toggle('on',m);
+  document.getElementById('tab-llis').classList.toggle('on',!m);
+}
+document.getElementById('tab-map').onclick=()=>{document.body.className='view-map';setTab(true)};
+document.getElementById('tab-llis').onclick=()=>{document.body.className='view-llis';setTab(false)};
+setTimeout(()=>map.invalidateSize(),100);
+window.addEventListener('resize', ()=>map.invalidateSize());
+
+/* ---------- Avisos ---------- */
+function avisa(html, ms){
+  const a=document.getElementById('aviso');
+  a.innerHTML=html; a.style.display='block';
+  if(ms) setTimeout(()=>a.style.display='none',ms);
+}
+
+/* ============================================================
+   SINCRO + ARRENCADA
+   ============================================================ */
+async function sincro(){
+  let ok=false, motiu="";
+  if(!navigator.onLine){
+    motiu = "Sembla que no hi ha connexió a internet.";
+  } else {
+    try{
+      const llocs = await carregaPestanyaLlocs();
+      const config = await carregaPestanyaConfig();
+      aplicaConfig(config);
+      PLACES_SHEET = llocs;
+      localStorage.setItem(LS_CACHE, JSON.stringify(llocs));
+      localStorage.setItem(LS_CONFIG, JSON.stringify(config));
+      map.setView(CONFIG.centre, CONFIG.zoom);
+      ok = true;
+    }catch(e){
+      motiu = String(e.message||e);
+      console.warn("[Viatge] Detalls de l'error de sincronització:", e);
+    }
+  }
+  if(!ok){
+    let teniaCau=false;
+    try{
+      PLACES_SHEET=JSON.parse(localStorage.getItem(LS_CACHE)||"null")||[];
+      aplicaConfig(JSON.parse(localStorage.getItem(LS_CONFIG)||"null"));
+      teniaCau = PLACES_SHEET.length>0;
+    }catch(e2){ PLACES_SHEET=[]; }
+    if(!PLACES_SHEET.length) PLACES_SHEET=PLACES_EXEMPLE;
+    avisa(`⚠️ No s'ha pogut sincronitzar amb Google Sheets${motiu?`<br><small style="font-weight:500">Motiu: ${motiu}</small>`:""}<br><small style="font-weight:500">${teniaCau?"Es mostren les dades de l'última sincronització.":"Cap cau disponible: es mostra l'exemple."}<br>Pots obrir el <a href="https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit" target="_blank" style="color:#8a5a00">full manualment</a> per comprovar que sigui accessible.</small>`, 12000);
+  }
+  munta();
+  refrescaDies();
+  refrescaTot();
+}
+
+function munta(){ PLACES = [...PLACES_SHEET]; }
+
+/* ============================================================
+   PORTA DE CONTRASENYA
+   Un cop autoritzat, es recorda durant AUTH_DIES dies.
+   ============================================================ */
+function jaAutoritzat(){
+  try{
+    const a = JSON.parse(localStorage.getItem(AUTH_KEY)||"null");
+    return a && a.tok===btoa(PASSWORD) && Date.now() < a.exp;
+  }catch(e){ return false; }
+}
+function marcaAutoritzat(){
+  localStorage.setItem(AUTH_KEY, JSON.stringify({
+    tok: btoa(PASSWORD),
+    exp: Date.now() + AUTH_DIES*24*60*60*1000
+  }));
+}
+(function iniciaGate(){
+  const gate=document.getElementById('gate');
+  if(jaAutoritzat()){ gate.remove(); sincro(); return; }
+  document.getElementById('g-btn').onclick = ()=>{
+    const v = document.getElementById('g-pass').value.trim();
+    if(v === PASSWORD){
+      marcaAutoritzat();
+      gate.remove();
+      sincro();
+    }else{
+      document.getElementById('g-err').style.display='block';
+      document.getElementById('g-pass').value='';
+    }
+  };
+  document.getElementById('g-pass').addEventListener('keydown', e=>{
+    if(e.key==='Enter') document.getElementById('g-btn').click();
+  });
+})();
+</script>
+</body>
+</html>
