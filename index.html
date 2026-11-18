@@ -270,21 +270,6 @@ const PASSWORD = "LaCasita";
 const AUTH_KEY = "viatge_auth_v1";
 const AUTH_DIES = 30;
 
-/* ---------- Estils de mapa disponibles ---------- */
-const ESTILS = {
-  local:{ nom:"🗾 Noms locals (actual)",
-          url:"https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-          attr:"&copy; OpenStreetMap" },
-  llati:{ nom:"🌐 Noms en lletres llatines",
-          url:"https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-          attr:"&copy; OpenStreetMap &copy; CARTO", subdomains:"abcd" },
-  cata: { nom:"🏡 Català (Països Catalans)",
-          url:"https://tile.osm.cat/{z}/{x}/{y}.png",
-          attr:"&copy; OpenStreetMap · osm.cat" },
-};
-const ESTIL_DEFECTE = "local";
-let capaBase = null;
-
 /* ---------- Categories: colors lligats a les variables CSS ---------- */
 const CATS = {
   hotel:      {emoji:"🏨", nom:"Hotels",     color:"var(--c-hotel)"},
@@ -467,17 +452,7 @@ function passaFiltre(p){
 
 /* ---------- Mapa ---------- */
 const map = L.map('map').setView(CONFIG.centre, CONFIG.zoom);
-function setEstil(id){
-  const e = ESTILS[id] || ESTILS[ESTIL_DEFECTE];
-  if(capaBase) map.removeLayer(capaBase);
-  capaBase = L.tileLayer(e.url, {maxZoom:19, attribution:e.attr, subdomains:e.subdomains||"abc"}).addTo(map);
-  try{ localStorage.setItem("viatge_estil_mapa", id); }catch(err){}
-}
-setEstil(localStorage.getItem("viatge_estil_mapa") || ESTIL_DEFECTE);
-L.control.layers(
-  Object.fromEntries(Object.entries(ESTILS).map(([k,e])=>[e.nom, capaBase])) ,
-  null, {position:"bottomright"}
-);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
 
 function icona(cat){
   const c = CATS[cat]||{emoji:"📍",color:"#888"};
@@ -560,7 +535,7 @@ window.copiaCoords = function(i){
   );
 };
 
-/* ---------- Llistes (corregit: cada categoria només mostra els SEUS llocs) ---------- */
+/* ---------- Llistes (cada categoria només mostra els SEUS llocs) ---------- */
 function refrescaLlistes(){
   let h="";
   Object.entries(CATS).forEach(([k,c])=>{
@@ -668,15 +643,6 @@ selDia.title="Filtra per dia";
 selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>`;
 selDia.onchange=()=>{ diaFiltre=selDia.value; refrescaTot(); };
 fCont.appendChild(selDia);
-
-/* Selector d'estil de mapa */
-const selEstil=document.createElement('select');
-selEstil.className='chip';
-selEstil.title="Estil del mapa";
-selEstil.innerHTML=Object.entries(ESTILS).map(([k,e])=>`<option value="${k}">${e.nom}</option>`).join("");
-selEstil.value = localStorage.getItem("viatge_estil_mapa") || ESTIL_DEFECTE;
-selEstil.onchange=()=>setEstil(selEstil.value);
-fCont.appendChild(selEstil);
 
 function refrescaDies(){
   const dies=[...new Set(PLACES.map(p=>grupDeDia(p.dia)).filter(d=>d!=="(sense dia)"))];
