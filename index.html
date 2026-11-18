@@ -43,9 +43,9 @@ body{
 }
 #splash.amaga{opacity:0;pointer-events:none}
 #splash .slogo{
-  width:84px;height:84px;border-radius:26px;display:flex;align-items:center;justify-content:center;
-  font-size:44px;background:linear-gradient(135deg,var(--pri),#a46bff);
-  box-shadow:0 14px 40px rgba(109,74,255,.35);
+  width:92px;height:92px;border-radius:26px;display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.7);
+  box-shadow:0 14px 40px rgba(109,74,255,.28);
 }
 #splash .stxt{font-size:15px;font-weight:700;color:var(--muted)}
 #splash .spin{width:26px;height:26px;border-radius:50%;border:3px solid rgba(109,74,255,.2);border-top-color:var(--pri);animation:giro 1s linear infinite}
@@ -57,7 +57,8 @@ header{
   color:#fff;padding:14px 16px calc(10px + env(safe-area-inset-top));padding-top:calc(10px + env(safe-area-inset-top));flex:none;
   box-shadow:0 4px 24px rgba(109,74,255,.25);
 }
-h1{font-size:19px;font-weight:800;letter-spacing:.2px}
+h1{font-size:19px;font-weight:800;letter-spacing:.2px;display:flex;align-items:center;gap:9px}
+h1 .simbol{display:inline-flex;flex-shrink:0}
 .dates{font-size:13px;opacity:.88;margin-top:2px}
 .sincc{font-size:11.5px;opacity:.78;margin-top:4px}
 .counts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
@@ -72,10 +73,7 @@ h1{font-size:19px;font-weight:800;letter-spacing:.2px}
 }
 .chip.on{color:#fff;border-color:transparent}
 select.chip{appearance:none;-webkit-appearance:none;font-family:inherit;outline:none;max-width:220px;white-space:nowrap}
-/* ---------- Panells: la visibilitat depèn de la classe del body ----------
-   view-map  → només mapa
-   view-llis → només llistes
-   view-itin → només itinerari                                             */
+/* ---------- Panells: la visibilitat depèn de la classe del body ---------- */
 #content{flex:1;position:relative;overflow:hidden}
 #map{position:absolute;top:0;left:0;right:0;bottom:64px;display:none;border-radius:0}
 .main{position:absolute;top:0;left:0;right:0;bottom:64px;overflow-y:auto;padding:4px 14px 28px;display:none}
@@ -111,7 +109,7 @@ nav{position:absolute;left:0;right:0;bottom:0;height:64px;
 nav button{flex:1;border:none;background:none;font-size:11.5px;font-weight:700;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 nav button .ni{font-size:20px}
 nav button.on{color:var(--pri)}
-/* ---------- Escriptori: mapa + panell dret (mostra la pestanya activa) ---------- */
+/* ---------- Escriptori ---------- */
 @media (min-width:900px){
   #map{right:42%;bottom:0;display:block !important}
   body.view-llis #llistes,
@@ -135,9 +133,9 @@ nav button.on{color:var(--pri)}
 .aviso{position:absolute;left:12px;right:12px;top:12px;z-index:1500;
   background:rgba(255,244,229,.95);backdrop-filter:blur(10px);color:#8a5a00;border-radius:14px;padding:10px 14px;font-size:13px;font-weight:600;
   box-shadow:0 6px 20px rgba(34,26,68,.15);display:none;max-height:40vh;overflow-y:auto}
-/* ---------- Fitxa detall (finestra separada en tocar un pin) ----------
+/* ---------- Fitxa detall ----------
    Dos estats: col·lapsada (mitja pantalla) i expandida (gairebé tota).
-   Gestos: lliscar AMUNT → expandir · lliscar AVALL → tancar          */
+   Gestos: lliscar AMUNT → expandir · lliscar AVALL → tancar            */
 #fitxa{position:fixed;inset:0;z-index:3000;display:none;align-items:flex-end;justify-content:center}
 #fitxa.open{display:flex}
 #fitxa .fons{position:absolute;inset:0;background:rgba(34,26,68,.45);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
@@ -198,9 +196,9 @@ nav button.on{color:var(--pri)}
 </head>
 <body class="view-map">
 
-<!-- Pantalla de càrrega (es modifiqui amb la imatge final més endavant) -->
+<!-- Pantalla de càrrega -->
 <div id="splash">
-  <div class="slogo">🧳</div>
+  <div class="slogo" id="splash-logo"></div>
   <div class="stxt" id="splash-txt">Preparant el viatge…</div>
   <div class="spin"></div>
 </div>
@@ -218,7 +216,7 @@ nav button.on{color:var(--pri)}
 </div>
 
 <header>
-  <h1 id="titol"></h1>
+  <h1><span class="simbol" id="h-simbol"></span><span id="titol"></span></h1>
   <div class="dates" id="dates"></div>
   <div class="sincc" id="sincc"></div>
   <div class="counts" id="counts"></div>
@@ -262,6 +260,9 @@ nav button.on{color:var(--pri)}
    ⚙️ CONEXIÓ AMB EL GOOGLE SHEETS (LA BASE DE DADES)  ✅ CONNECTAT
    Pestanyes: "Llocs" (Nom,Categoria,Lat,Lng,Dia,Nota,Link)
               "Config" (Clau,Valor) — també admet claus color_*
+              "Categories" (Clau,Emoji,Nom,Color) — OPCIONAL:
+                  si existeix, defineix les categories de l'app.
+                  Ex.: museu | 🖼️ | Museus | #7c5cff
    ============================================================ */
 const SHEET_ID = "1tUIidz7rAFAQPBprGGwYSljTZ0styLm6aFFozYILFAs";
 
@@ -270,8 +271,29 @@ const PASSWORD = "LaCasita";
 const AUTH_KEY = "viatge_auth_v1";
 const AUTH_DIES = 30;
 
-/* ---------- Categories: colors lligats a les variables CSS ---------- */
-const CATS = {
+/* ---------- Símbol de l'app: cabdell de llana vermell sobre bandera blanca ---------- */
+function simbolSVG(mida){
+  return `<svg viewBox="0 0 64 64" width="${mida}" height="${mida}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">`
+    +`<rect x="3" y="3" width="58" height="58" rx="12" fill="#ffffff" stroke="#e5def6" stroke-width="3"/>`
+    +`<circle cx="31" cy="33" r="14.5" fill="#d2372c"/>`
+    +`<g fill="none" stroke="#f3b7b1" stroke-width="2" stroke-linecap="round">`
+    +`<path d="M18.5 28.5 Q31 21.5 43.5 28.5"/><path d="M17.5 35 Q31 28.5 44.5 35"/>`
+    +`<path d="M20 41.5 Q31 35.5 42 41.5"/><path d="M27 19.5 Q21 33 27 46.5"/>`
+    +`<path d="M36.5 19.8 Q42.5 33 36.5 46.2"/></g>`
+    +`<path d="M45 36 q8 5 4 12" fill="none" stroke="#d2372c" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+}
+/* favicon = el mateix símbol */
+(function(){
+  const fav=document.createElement('link'); fav.rel='icon';
+  fav.href='data:image/svg+xml,'+encodeURIComponent(simbolSVG(64));
+  document.head.appendChild(fav);
+})();
+document.getElementById('splash-logo').innerHTML = simbolSVG(64);
+document.getElementById('h-simbol').innerHTML = simbolSVG(24);
+
+/* ---------- Categories per defecte (es poden substituir des del Sheet,
+   pestanya "Categories": columnes Clau, Emoji, Nom, Color) ---------- */
+const CATS_DEFECTE = {
   hotel:      {emoji:"🏨", nom:"Hotels",     color:"var(--c-hotel)"},
   activitat:  {emoji:"🎡", nom:"Activitats", color:"var(--c-activitat)"},
   transport:  {emoji:"🚆", nom:"Transports", color:"var(--c-transport)"},
@@ -279,6 +301,7 @@ const CATS = {
   restaurant: {emoji:"🍽️", nom:"Restaurants",color:"var(--c-restaurant)"},
   cafeteria:  {emoji:"☕", nom:"Cafeteries", color:"var(--c-cafeteria)"},
 };
+let CATS = {...CATS_DEFECTE};
 const CLAUS_COLOR = {
   color_principal:"--pri", color_fons:"--fons", color_targeta:"--targeta",
   color_text:"--text", color_muted:"--muted",
@@ -304,9 +327,13 @@ let filtreCat = new Set(Object.keys(CATS));
 let diaFiltre = "tots";
 let marcadors = {};
 
+function slug(v){
+  return String(v||"").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9_]/g,"_").replace(/s$/,"");
+}
 function normalitzaCat(v){
-  const s = String(v||"").trim().toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/s$/,"");
+  const s = slug(v);
   return CATS[s] ? s : null;
 }
 function num(v){ const n=parseFloat(String(v).replace(",",".")); return isNaN(n)?null:n; }
@@ -368,6 +395,8 @@ async function viaOpenSheet(nom){
   if(!Array.isArray(d)) throw new Error("format inesperat");
   return d;
 }
+
+/* ---------- Llocs ---------- */
 function rowsCsvAPlaces(csvTxt){
   const rows = parseCSV(csvTxt);
   const head = (rows.shift()||[]).map(h=>String(h).trim().toLowerCase());
@@ -378,11 +407,6 @@ function rowsCsvAPlaces(csvTxt){
     dia:r[idx("dia")]||"", nota:r[idx("nota")]||"", link:r[idx("link")]||"",
   })).filter(p=>p.nom && p.cat && p.lat!==null && p.lng!==null);
 }
-function csvAConfig(csvTxt){
-  const config = {};
-  parseCSV(csvTxt).forEach(r=>{ if(r[0]) config[String(r[0]).trim()] = (r[1]||"").trim(); });
-  return config;
-}
 function jsonpAPlaces(cols, rows){
   const idx = n => cols.indexOf(n);
   return rows.map(r=>({
@@ -390,11 +414,6 @@ function jsonpAPlaces(cols, rows){
     lat:num(r[idx("lat")]), lng:num(r[idx("lng")]),
     dia:r[idx("dia")]||"", nota:r[idx("nota")]||"", link:r[idx("link")]||"",
   })).filter(p=>p.nom && p.cat && p.lat!==null && p.lng!==null);
-}
-function jsonpAConfig(cols, rows){
-  const config = {}; const iC=cols.indexOf("clau"), iV=cols.indexOf("valor");
-  if(iC>=0) rows.forEach(r=>{ if(r[iC]) config[String(r[iC]).trim()]=(r[iV]||"").trim(); });
-  return config;
 }
 function objesAPlaces(objes){
   return objes.map(o=>({
@@ -414,6 +433,18 @@ async function carregaPestanyaLlocs(){
   }catch(e){ intents.push("gviz-jsonp: "+e.message); }
   try{ return objesAPlaces(await viaOpenSheet("Llocs")); }catch(e){ intents.push("opensheet: "+e.message); }
   throw new Error(intents.join(" · "));
+}
+
+/* ---------- Config ---------- */
+function csvAConfig(csvTxt){
+  const config = {};
+  parseCSV(csvTxt).forEach(r=>{ if(r[0]) config[String(r[0]).trim()] = (r[1]||"").trim(); });
+  return config;
+}
+function jsonpAConfig(cols, rows){
+  const config = {}; const iC=cols.indexOf("clau"), iV=cols.indexOf("valor");
+  if(iC>=0) rows.forEach(r=>{ if(r[iC]) config[String(r[iC]).trim()]=(r[iV]||"").trim(); });
+  return config;
 }
 async function carregaPestanyaConfig(){
   try{ return csvAConfig(await viaGviz("Config")); }catch(e){}
@@ -441,6 +472,62 @@ function aplicaConfig(cfg){
       document.documentElement.style.setProperty(varCss, v.trim().startsWith("#")?v.trim():"#"+v.trim());
     }
   });
+}
+
+/* ---------- Categories dinàmiques des del Sheet (pestanya opcional "Categories") ----------
+   Columnes: Clau | Emoji | Nom | Color   (el Color és opcional: buit = color per defecte)
+   Ex.:  museu | 🖼️ | Museus | #7c5cff                                                 */
+function aplicaUnaCategoria(f){
+  if(!f.clau || !f.nom) return false;
+  const k = slug(f.clau);
+  if(!k) return false;
+  const color = (f.color && /^#?[0-9a-fA-F]{3,8}$/.test(f.color.trim()))
+    ? (f.color.trim().startsWith("#")?f.color.trim():"#"+f.color.trim())
+    : null;
+  CATS[k] = {
+    emoji: f.emoji || "📍",
+    nom: f.nom,
+    color: color || `var(--c-${k},#6d4aff)`,
+  };
+  if(color) document.documentElement.style.setProperty(`--c-${k}`, color);
+  return true;
+}
+function aplicaCategories(files){
+  let n=0;
+  (files||[]).forEach(f=>{ if(aplicaUnaCategoria(f)) n++; });
+  return n;
+}
+async function carregaPestanyaCategories(){
+  try{
+    const rows = parseCSV(await viaGviz("Categories"));
+    const head = (rows.shift()||[]).map(h=>String(h).trim().toLowerCase());
+    const idx = n => head.indexOf(n);
+    return rows.map(r=>({
+      clau:String(r[idx("clau")]??r[idx("categoria")]??"").trim(),
+      emoji:String(r[idx("emoji")]??"").trim(),
+      nom:String(r[idx("nom")]??"").trim(),
+      color:String(r[idx("color")]??"").trim(),
+    })).filter(f=>f.clau);
+  }catch(e){}
+  try{
+    const {cols, rows} = await viaJsonp("Categories");
+    const idx = n => cols.indexOf(n);
+    return rows.map(r=>({
+      clau:String(r[idx("clau")]??r[idx("categoria")]??"").trim(),
+      emoji:String(r[idx("emoji")]??"").trim(),
+      nom:String(r[idx("nom")]??"").trim(),
+      color:String(r[idx("color")]??"").trim(),
+    })).filter(f=>f.clau);
+  }catch(e){}
+  try{
+    return (await viaOpenSheet("Categories")).map(o=>({
+      clau:String(o["Clau"]??o["categoria"]??"").trim(),
+      emoji:String(o["Emoji"]??"").trim(),
+      nom:String(o["Nom"]??"").trim(),
+      color:String(o["Color"]??"").trim(),
+    })).filter(f=>f.clau);
+  }catch(e){}
+  return null;
 }
 
 /* ---------- Filtratge ---------- */
@@ -498,6 +585,12 @@ function obreFitxa(i){
   fitxa.classList.remove('expans');
   fFull.scrollTop = 0;
   fFull.classList.remove('anim'); void fFull.offsetWidth; fFull.classList.add('anim');
+  /* Centra el lloc al mapa de fons (a l'escriptori el mapa es veu al costat;
+     al mòbil queda a punt per quan tornis a la pestanya Mapa) */
+  const centre = map.getCenter();
+  if(Math.abs(centre.lat-p.lat)>1e-4 || Math.abs(centre.lng-p.lng)>1e-4){
+    map.flyTo([p.lat,p.lng], Math.max(map.getZoom()||13, 15), {duration:.6});
+  }
 }
 function tancaFitxa(){ fitxa.classList.remove('open','expans'); fFull.style.transform=""; }
 document.getElementById('f-tancar').onclick = tancaFitxa;
@@ -514,9 +607,9 @@ fFull.addEventListener('touchmove', e=>{
   const dy = e.touches[0].clientY - dragY;
   const aDalt = fFull.scrollTop <= 0;
   const pucTancar = (!fitxa.classList.contains('expans')) || aDalt;
-  if(dy < -40){                       // lliscar AMUNT → expandir
+  if(dy < -40){
     fitxa.classList.add('expans'); dragActiu=false; fFull.style.transform="";
-  }else if(dy > 50 && pucTancar){     // lliscar AVALL → tancar
+  }else if(dy > 50 && pucTancar){
     dragActiu=false; fFull.style.transform="";
     tancaFitxa();
   }else if((dy>0 && pucTancar) || dy<0){
@@ -606,43 +699,54 @@ function refrescaTot(){
     : "⚠️ Sense dades del Sheet";
 }
 
-/* ---------- Filtres ---------- */
+/* ---------- Filtres (es reconstrueixen si canvien les categories) ---------- */
 const fCont = document.getElementById('filtres');
+let selDia=null;
+function refrescaFiltres(){
+  fCont.innerHTML="";
+  if(!selDia){
+    selDia=document.createElement('select');
+    selDia.className='chip';
+    selDia.title="Filtra per dia";
+    selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>`;
+    selDia.onchange=()=>{ diaFiltre=selDia.value; refrescaTot(); };
+  }
+  /* netegem claus de categories que ja no existeixen */
+  filtreCat = new Set([...filtreCat].filter(k=>CATS[k]));
+  if(!filtreCat.size) filtreCat = new Set(Object.keys(CATS));
 
-/* Botó "Mostra-ho tot" (un sol click) */
-const bTotes=document.createElement('button');
-bTotes.className='chip on';
-bTotes.textContent='✨ Tot';
-bTotes.title="Mostra totes les categories i tots els dies";
-bTotes.onclick=()=>{
-  filtreCat = new Set(Object.keys(CATS));
-  document.querySelectorAll('#filtres .chip[data-k]').forEach(b=>{
-    b.classList.add('on');
-    b.style.background = CATS[b.dataset.k].color;
-  });
-  diaFiltre="tots"; selDia.value="tots";
-  refrescaTot();
-};
-fCont.appendChild(bTotes);
-
-Object.entries(CATS).forEach(([k,c])=>{
-  const b=document.createElement('button');
-  b.className='chip on'; b.style.background=c.color;
-  b.textContent=`${c.emoji} ${c.nom}`;
-  b.dataset.k=k;
-  b.onclick=()=>{
-    if(filtreCat.has(k)){filtreCat.delete(k);b.classList.remove('on');b.style.background='';}
-    else{filtreCat.add(k);b.classList.add('on');b.style.background=c.color;}
+  /* Botó "Mostra-ho tot" (un sol click) */
+  const bTotes=document.createElement('button');
+  bTotes.className='chip on';
+  bTotes.textContent='✨ Tot';
+  bTotes.title="Mostra totes les categories i tots els dies";
+  bTotes.onclick=()=>{
+    filtreCat = new Set(Object.keys(CATS));
+    document.querySelectorAll('#filtres .chip[data-k]').forEach(b=>{
+      b.classList.add('on');
+      b.style.background = CATS[b.dataset.k].color;
+    });
+    diaFiltre="tots"; selDia.value="tots";
     refrescaTot();
   };
-  fCont.appendChild(b);
-});
-const selDia=document.createElement('select');
-selDia.className='chip';
-selDia.title="Filtra per dia";
-selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>`;
-selDia.onchange=()=>{ diaFiltre=selDia.value; refrescaTot(); };
-fCont.appendChild(selDia);
+  fCont.appendChild(bTotes);
+
+  Object.entries(CATS).forEach(([k,c])=>{
+    const b=document.createElement('button');
+    b.className='chip'+(filtreCat.has(k)?' on':'');
+    if(filtreCat.has(k)) b.style.background=c.color;
+    b.textContent=`${c.emoji} ${c.nom}`;
+    b.dataset.k=k;
+    b.onclick=()=>{
+      if(filtreCat.has(k)){filtreCat.delete(k);b.classList.remove('on');b.style.background='';}
+      else{filtreCat.add(k);b.classList.add('on');b.style.background=c.color;}
+      refrescaTot();
+    };
+    fCont.appendChild(b);
+  });
+  fCont.appendChild(selDia);
+}
+refrescaFiltres();
 
 function refrescaDies(){
   const dies=[...new Set(PLACES.map(p=>grupDeDia(p.dia)).filter(d=>d!=="(sense dia)"))];
@@ -652,7 +756,7 @@ function refrescaDies(){
   if(dies.includes(previ)) selDia.value=previ; else { diaFiltre="tots"; selDia.value="tots"; }
 }
 
-/* ---------- Tabs: la classe del body controla què es veu ---------- */
+/* ---------- Tabs ---------- */
 function setTab(qui){
   document.body.classList.remove('view-map','view-llis','view-itin');
   document.body.classList.add('view-'+qui);
@@ -676,7 +780,6 @@ function avisa(html, ms){
 const splash=document.getElementById('splash');
 function mostraSplash(){ splash.classList.remove('amaga'); }
 function amagaSplash(){ splash.classList.add('amaga'); }
-/* Seguretat: mai més de 12 segons carregant */
 setTimeout(amagaSplash, 12000);
 
 /* ---------- Sincro ---------- */
@@ -685,12 +788,20 @@ async function sincro(){
   if(!navigator.onLine){ motiu = "Sembla que no hi ha connexió a internet."; }
   else{
     try{
-      const llocs = await carregaPestanyaLlocs();
       const config = await carregaPestanyaConfig();
       aplicaConfig(config);
+      /* Categories des del Sheet (opcional): si la pestanya "Categories"
+         existeix i té files vàlides, SUBSTITUEIX les categories de defecte */
+      const filesCats = await carregaPestanyaCategories();
+      if(filesCats && filesCats.length){
+        const n = aplicaCategories(filesCats);
+        CATS = n ? {...CATS} : {...CATS_DEFECTE};
+      }
+      const llocs = await carregaPestanyaLlocs();
       PLACES_SHEET = llocs;
       localStorage.setItem(LS_CACHE, JSON.stringify(llocs));
       localStorage.setItem(LS_CONFIG, JSON.stringify(config));
+      try{ localStorage.setItem("viatge_cats_cache", JSON.stringify(filesCats&&filesCats.length?filesCats:null)); }catch(e3){}
       map.setView(CONFIG.centre, CONFIG.zoom);
       ok = true;
     }catch(e){
@@ -703,12 +814,15 @@ async function sincro(){
     try{
       PLACES_SHEET=JSON.parse(localStorage.getItem(LS_CACHE)||"null")||[];
       aplicaConfig(JSON.parse(localStorage.getItem(LS_CONFIG)||"null"));
+      const catsCau=JSON.parse(localStorage.getItem("viatge_cats_cache")||"null");
+      if(catsCau && catsCau.length){ CATS={...CATS_DEFECTE}; aplicaCategories(catsCau); }
       teniaCau = PLACES_SHEET.length>0;
     }catch(e2){ PLACES_SHEET=[]; }
     if(!PLACES_SHEET.length) PLACES_SHEET=PLACES_EXEMPLE;
     avisa(`⚠️ No s'ha pogut sincronitzar amb Google Sheets${motiu?`<br><small style="font-weight:500">Motiu: ${motiu}</small>`:""}<br><small style="font-weight:500">${teniaCau?"Es mostren les dades de l'última sincronització.":"Cap cau: es mostra l'exemple."}</small>`, 12000);
   }
   PLACES = [...PLACES_SHEET];
+  refrescaFiltres();
   refrescaDies();
   refrescaTot();
   amagaSplash();
@@ -730,16 +844,16 @@ function marcaAutoritzat(){
 (function iniciaGate(){
   const gate=document.getElementById('gate');
   if(jaAutoritzat()){
-    sincro();               // la pantalla de càrrega tapa l'app fins que hi ha dades
+    sincro();
   }else{
-    amagaSplash();          // la porta cobreix tota la pantalla de totes maneres
+    amagaSplash();
     gate.style.display='flex';
     document.getElementById('g-btn').onclick = ()=>{
       const v = document.getElementById('g-pass').value.trim();
       if(v === PASSWORD){
         marcaAutoritzat();
         gate.style.display='none';
-        mostraSplash();     // tapa el mapa mentre es sincronitza
+        mostraSplash();
         sincro();
       }else{
         document.getElementById('g-err').style.display='block';
