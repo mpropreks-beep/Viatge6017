@@ -260,9 +260,6 @@ nav button.on{color:var(--pri)}
    ⚙️ CONEXIÓ AMB EL GOOGLE SHEETS (LA BASE DE DADES)  ✅ CONNECTAT
    Pestanyes: "Llocs" (Nom,Categoria,Lat,Lng,Dia,Nota,Link)
               "Config" (Clau,Valor) — també admet claus color_*
-              "Categories" (Clau,Emoji,Nom,Color) — OPCIONAL:
-                  si existeix, defineix les categories de l'app.
-                  Ex.: museu | 🖼️ | Museus | #7c5cff
    ============================================================ */
 const SHEET_ID = "1tUIidz7rAFAQPBprGGwYSljTZ0styLm6aFFozYILFAs";
 
@@ -291,9 +288,8 @@ function simbolSVG(mida){
 document.getElementById('splash-logo').innerHTML = simbolSVG(64);
 document.getElementById('h-simbol').innerHTML = simbolSVG(24);
 
-/* ---------- Categories per defecte (es poden substituir des del Sheet,
-   pestanya "Categories": columnes Clau, Emoji, Nom, Color) ---------- */
-const CATS_DEFECTE = {
+/* ---------- Categories fixes ---------- */
+const CATS = {
   hotel:      {emoji:"🏨", nom:"Hotels",     color:"var(--c-hotel)"},
   activitat:  {emoji:"🎡", nom:"Activitats", color:"var(--c-activitat)"},
   transport:  {emoji:"🚆", nom:"Transports", color:"var(--c-transport)"},
@@ -301,7 +297,6 @@ const CATS_DEFECTE = {
   restaurant: {emoji:"🍽️", nom:"Restaurants",color:"var(--c-restaurant)"},
   cafeteria:  {emoji:"☕", nom:"Cafeteries", color:"var(--c-cafeteria)"},
 };
-let CATS = {...CATS_DEFECTE};
 const CLAUS_COLOR = {
   color_principal:"--pri", color_fons:"--fons", color_targeta:"--targeta",
   color_text:"--text", color_muted:"--muted",
@@ -327,16 +322,60 @@ let filtreCat = new Set(Object.keys(CATS));
 let diaFiltre = "tots";
 let marcadors = {};
 
-function slug(v){
-  return String(v||"").trim().toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
-    .replace(/[^a-z0-9_]/g,"_").replace(/s$/,"");
-}
 function normalitzaCat(v){
-  const s = slug(v);
+  const s = String(v||"").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/s$/,"");
   return CATS[s] ? s : null;
 }
 function num(v){ const n=parseFloat(String(v).replace(",",".")); return isNaN(n)?null:n; }
+
+/* ---------- Ordenació cronològica del camp "Dia" ----------
+   Entén: "29 de novembre", "3 dec", "Dic 3", "12/11/2026",
+   "3 novembre · 10:00", mesos en català i castellà.
+   Retorna un número; null si no s'hi reconeix cap mes.      */
+const MESOS_MAP = {};
+(function(){
+  const mesos = [
+    ["gener","gen","enero","ene"],
+    ["febrer","feb","febrero"],
+    ["marc","mar","margo","marzo"],
+    ["abril","abr"],
+    ["maig","may"],
+    ["juny","jun"],
+    ["juliol","jul","julio"],
+    ["agost","ago","august","aug"],
+    ["setembre","sep","septiembre","sept"],
+    ["octubre","oct"],
+    ["novembre","nov"],
+    ["desembre","des","diciembre","dic","dec"],
+  ];
+  mesos.forEach((variants,m)=>variants.forEach(v=>MESOS_MAP[v]=m));
+})();
+function ordreDeDia(dia){
+  if(!dia) return null;
+  const s = String(dia).toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  let mes=null;
+  /* busquem el nom d'un mes al text */
+  for(const [nom,m] of Object.entries(MESOS_MAP)){
+    const re = new RegExp("(^|[^a-z])"+nom+"([^a-z]|$)");
+    if(re.test(s)){ mes=m; break; }
+  }
+  if(mes===null) return null;
+  /* dia del mes: el primer número de l'string (abans del "·") */
+  const numDia = s.match(/(\d{1,2})\b/);
+  const any = s.match(/\b(20\d{2})\b/);
+  const d = numDia ? Math.min(+numDia[1],31) : 1;
+  const y = any ? +any[1] : 2000; /* sense any explícit: any base per poder comparar */
+  return (y*10000) + ((mes+1)*100) + d;
+}
+function comparaPorDia(a,b){
+  const ka = ordreDeDia(a), kb = ordreDeDia(b);
+  if(ka!==null && kb!==null) return ka - kb;              /* dates reals: cronològic */
+  if(ka!==null && kb===null) return -1;                    /* amb data reconeguda primer */
+  if(ka===null && kb!==null) return 1;
+  return (a||"").localeCompare(b||"");                     /* sinó, com abans */
+}
 
 function parseCSV(text){
   const rows=[]; let row=[], cell="", q=false;
@@ -395,8 +434,6 @@ async function viaOpenSheet(nom){
   if(!Array.isArray(d)) throw new Error("format inesperat");
   return d;
 }
-
-/* ---------- Llocs ---------- */
 function rowsCsvAPlaces(csvTxt){
   const rows = parseCSV(csvTxt);
   const head = (rows.shift()||[]).map(h=>String(h).trim().toLowerCase());
@@ -434,8 +471,6 @@ async function carregaPestanyaLlocs(){
   try{ return objesAPlaces(await viaOpenSheet("Llocs")); }catch(e){ intents.push("opensheet: "+e.message); }
   throw new Error(intents.join(" · "));
 }
-
-/* ---------- Config ---------- */
 function csvAConfig(csvTxt){
   const config = {};
   parseCSV(csvTxt).forEach(r=>{ if(r[0]) config[String(r[0]).trim()] = (r[1]||"").trim(); });
@@ -472,62 +507,6 @@ function aplicaConfig(cfg){
       document.documentElement.style.setProperty(varCss, v.trim().startsWith("#")?v.trim():"#"+v.trim());
     }
   });
-}
-
-/* ---------- Categories dinàmiques des del Sheet (pestanya opcional "Categories") ----------
-   Columnes: Clau | Emoji | Nom | Color   (el Color és opcional: buit = color per defecte)
-   Ex.:  museu | 🖼️ | Museus | #7c5cff                                                 */
-function aplicaUnaCategoria(f){
-  if(!f.clau || !f.nom) return false;
-  const k = slug(f.clau);
-  if(!k) return false;
-  const color = (f.color && /^#?[0-9a-fA-F]{3,8}$/.test(f.color.trim()))
-    ? (f.color.trim().startsWith("#")?f.color.trim():"#"+f.color.trim())
-    : null;
-  CATS[k] = {
-    emoji: f.emoji || "📍",
-    nom: f.nom,
-    color: color || `var(--c-${k},#6d4aff)`,
-  };
-  if(color) document.documentElement.style.setProperty(`--c-${k}`, color);
-  return true;
-}
-function aplicaCategories(files){
-  let n=0;
-  (files||[]).forEach(f=>{ if(aplicaUnaCategoria(f)) n++; });
-  return n;
-}
-async function carregaPestanyaCategories(){
-  try{
-    const rows = parseCSV(await viaGviz("Categories"));
-    const head = (rows.shift()||[]).map(h=>String(h).trim().toLowerCase());
-    const idx = n => head.indexOf(n);
-    return rows.map(r=>({
-      clau:String(r[idx("clau")]??r[idx("categoria")]??"").trim(),
-      emoji:String(r[idx("emoji")]??"").trim(),
-      nom:String(r[idx("nom")]??"").trim(),
-      color:String(r[idx("color")]??"").trim(),
-    })).filter(f=>f.clau);
-  }catch(e){}
-  try{
-    const {cols, rows} = await viaJsonp("Categories");
-    const idx = n => cols.indexOf(n);
-    return rows.map(r=>({
-      clau:String(r[idx("clau")]??r[idx("categoria")]??"").trim(),
-      emoji:String(r[idx("emoji")]??"").trim(),
-      nom:String(r[idx("nom")]??"").trim(),
-      color:String(r[idx("color")]??"").trim(),
-    })).filter(f=>f.clau);
-  }catch(e){}
-  try{
-    return (await viaOpenSheet("Categories")).map(o=>({
-      clau:String(o["Clau"]??o["categoria"]??"").trim(),
-      emoji:String(o["Emoji"]??"").trim(),
-      nom:String(o["Nom"]??"").trim(),
-      color:String(o["Color"]??"").trim(),
-    })).filter(f=>f.clau);
-  }catch(e){}
-  return null;
 }
 
 /* ---------- Filtratge ---------- */
@@ -585,8 +564,7 @@ function obreFitxa(i){
   fitxa.classList.remove('expans');
   fFull.scrollTop = 0;
   fFull.classList.remove('anim'); void fFull.offsetWidth; fFull.classList.add('anim');
-  /* Centra el lloc al mapa de fons (a l'escriptori el mapa es veu al costat;
-     al mòbil queda a punt per quan tornis a la pestanya Mapa) */
+  /* Centra el lloc al mapa de fons */
   const centre = map.getCenter();
   if(Math.abs(centre.lat-p.lat)>1e-4 || Math.abs(centre.lng-p.lng)>1e-4){
     map.flyTo([p.lat,p.lng], Math.max(map.getZoom()||13, 15), {duration:.6});
@@ -628,14 +606,14 @@ window.copiaCoords = function(i){
   );
 };
 
-/* ---------- Llistes (cada categoria només mostra els SEUS llocs) ---------- */
+/* ---------- Llistes (ordenades cronològicament pel camp Dia) ---------- */
 function refrescaLlistes(){
   let h="";
   Object.entries(CATS).forEach(([k,c])=>{
     if(!filtreCat.has(k)) return;
     const llocs=PLACES.map((p,i)=>({p,i}))
       .filter(o=>o.p.cat===k && passaFiltre(o.p))
-      .sort((a,b)=>(a.p.dia||"zzz").localeCompare(b.p.dia||"zzz"));
+      .sort((a,b)=>comparaPorDia(a.p.dia, b.p.dia));
     if(!llocs.length) return;
     h+=`<div class="cat-title"><span class="dot" style="background:${c.color};color:${c.color}"></span>${c.nom} <small>(${llocs.length})</small></div>`;
     llocs.forEach(({p,i})=>{
@@ -644,7 +622,7 @@ function refrescaLlistes(){
   });
   document.getElementById('llistes').innerHTML = h || `<p style="text-align:center;color:var(--muted);margin-top:40px">Cap lloc amb els filtres actius 🙂</p>`;
 }
-/* ---------- Itinerari ---------- */
+/* ---------- Itinerari (grups de dia en ordre cronològic) ---------- */
 function grupDeDia(dia){
   if(!dia) return "(sense dia)";
   const i = dia.indexOf("·");
@@ -656,13 +634,15 @@ function refrescaItinerari(){
   vis.forEach(o=>{
     const g=grupDeDia(o.p.dia);
     let gp=grups.find(x=>x.nom===g);
-    if(!gp){ gp={nom:g, llocs:[]}; grups.push(gp); }
+    if(!gp){ gp={nom:g, llocs:[], exemplar:o.p.dia}; grups.push(gp); }
     gp.llocs.push(o);
   });
+  /* els grups de dia també en ordre cronològic */
+  grups.sort((a,b)=>comparaPorDia(a.exemplar, b.exemplar));
   let h="";
   grups.forEach(g=>{
     h+=`<div class="dia-bloc"><div class="dia-cap">📆 ${g.nom} <span class="ndia">${g.llocs.length}</span></div><div class="timeline">`;
-    g.llocs.sort((a,b)=>(a.p.dia||"").localeCompare(b.p.dia||"")).forEach(({p,i})=>{
+    g.llocs.sort((a,b)=>comparaPorDia(a.p.dia, b.p.dia)).forEach(({p,i})=>{
       const c=CATS[p.cat]||{emoji:"📍",color:"#888"};
       const hora=(p.dia&&p.dia.indexOf("·")>0)?p.dia.split("·").slice(1).join("·").trim():"";
       h+=`<div class="tstop" style="--dot:${c.color}">
@@ -699,57 +679,48 @@ function refrescaTot(){
     : "⚠️ Sense dades del Sheet";
 }
 
-/* ---------- Filtres (es reconstrueixen si canvien les categories) ---------- */
+/* ---------- Filtres ---------- */
 const fCont = document.getElementById('filtres');
-let selDia=null;
-function refrescaFiltres(){
-  fCont.innerHTML="";
-  if(!selDia){
-    selDia=document.createElement('select');
-    selDia.className='chip';
-    selDia.title="Filtra per dia";
-    selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>`;
-    selDia.onchange=()=>{ diaFiltre=selDia.value; refrescaTot(); };
-  }
-  /* netegem claus de categories que ja no existeixen */
-  filtreCat = new Set([...filtreCat].filter(k=>CATS[k]));
-  if(!filtreCat.size) filtreCat = new Set(Object.keys(CATS));
 
-  /* Botó "Mostra-ho tot" (un sol click) */
-  const bTotes=document.createElement('button');
-  bTotes.className='chip on';
-  bTotes.textContent='✨ Tot';
-  bTotes.title="Mostra totes les categories i tots els dies";
-  bTotes.onclick=()=>{
-    filtreCat = new Set(Object.keys(CATS));
-    document.querySelectorAll('#filtres .chip[data-k]').forEach(b=>{
-      b.classList.add('on');
-      b.style.background = CATS[b.dataset.k].color;
-    });
-    diaFiltre="tots"; selDia.value="tots";
+/* Botó "Mostra-ho tot" (un sol click) */
+const bTotes=document.createElement('button');
+bTotes.className='chip on';
+bTotes.textContent='✨ Tot';
+bTotes.title="Mostra totes les categories i tots els dies";
+bTotes.onclick=()=>{
+  filtreCat = new Set(Object.keys(CATS));
+  document.querySelectorAll('#filtres .chip[data-k]').forEach(b=>{
+    b.classList.add('on');
+    b.style.background = CATS[b.dataset.k].color;
+  });
+  diaFiltre="tots"; selDia.value="tots";
+  refrescaTot();
+};
+fCont.appendChild(bTotes);
+
+Object.entries(CATS).forEach(([k,c])=>{
+  const b=document.createElement('button');
+  b.className='chip on'; b.style.background=c.color;
+  b.textContent=`${c.emoji} ${c.nom}`;
+  b.dataset.k=k;
+  b.onclick=()=>{
+    if(filtreCat.has(k)){filtreCat.delete(k);b.classList.remove('on');b.style.background='';}
+    else{filtreCat.add(k);b.classList.add('on');b.style.background=c.color;}
     refrescaTot();
   };
-  fCont.appendChild(bTotes);
-
-  Object.entries(CATS).forEach(([k,c])=>{
-    const b=document.createElement('button');
-    b.className='chip'+(filtreCat.has(k)?' on':'');
-    if(filtreCat.has(k)) b.style.background=c.color;
-    b.textContent=`${c.emoji} ${c.nom}`;
-    b.dataset.k=k;
-    b.onclick=()=>{
-      if(filtreCat.has(k)){filtreCat.delete(k);b.classList.remove('on');b.style.background='';}
-      else{filtreCat.add(k);b.classList.add('on');b.style.background=c.color;}
-      refrescaTot();
-    };
-    fCont.appendChild(b);
-  });
-  fCont.appendChild(selDia);
-}
-refrescaFiltres();
+  fCont.appendChild(b);
+});
+const selDia=document.createElement('select');
+selDia.className='chip';
+selDia.title="Filtra per dia";
+selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>`;
+selDia.onchange=()=>{ diaFiltre=selDia.value; refrescaTot(); };
+fCont.appendChild(selDia);
 
 function refrescaDies(){
   const dies=[...new Set(PLACES.map(p=>grupDeDia(p.dia)).filter(d=>d!=="(sense dia)"))];
+  /* el desplegable de dies també en ordre cronològic */
+  dies.sort(comparaPorDia);
   const previ=diaFiltre;
   selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>` +
     dies.map(d=>`<option value="${d.replace(/"/g,"&quot;")}">${d}</option>`).join("");
@@ -788,20 +759,12 @@ async function sincro(){
   if(!navigator.onLine){ motiu = "Sembla que no hi ha connexió a internet."; }
   else{
     try{
+      const llocs = await carregaPestanyaLlocs();
       const config = await carregaPestanyaConfig();
       aplicaConfig(config);
-      /* Categories des del Sheet (opcional): si la pestanya "Categories"
-         existeix i té files vàlides, SUBSTITUEIX les categories de defecte */
-      const filesCats = await carregaPestanyaCategories();
-      if(filesCats && filesCats.length){
-        const n = aplicaCategories(filesCats);
-        CATS = n ? {...CATS} : {...CATS_DEFECTE};
-      }
-      const llocs = await carregaPestanyaLlocs();
       PLACES_SHEET = llocs;
       localStorage.setItem(LS_CACHE, JSON.stringify(llocs));
       localStorage.setItem(LS_CONFIG, JSON.stringify(config));
-      try{ localStorage.setItem("viatge_cats_cache", JSON.stringify(filesCats&&filesCats.length?filesCats:null)); }catch(e3){}
       map.setView(CONFIG.centre, CONFIG.zoom);
       ok = true;
     }catch(e){
@@ -814,15 +777,12 @@ async function sincro(){
     try{
       PLACES_SHEET=JSON.parse(localStorage.getItem(LS_CACHE)||"null")||[];
       aplicaConfig(JSON.parse(localStorage.getItem(LS_CONFIG)||"null"));
-      const catsCau=JSON.parse(localStorage.getItem("viatge_cats_cache")||"null");
-      if(catsCau && catsCau.length){ CATS={...CATS_DEFECTE}; aplicaCategories(catsCau); }
       teniaCau = PLACES_SHEET.length>0;
     }catch(e2){ PLACES_SHEET=[]; }
     if(!PLACES_SHEET.length) PLACES_SHEET=PLACES_EXEMPLE;
     avisa(`⚠️ No s'ha pogut sincronitzar amb Google Sheets${motiu?`<br><small style="font-weight:500">Motiu: ${motiu}</small>`:""}<br><small style="font-weight:500">${teniaCau?"Es mostren les dades de l'última sincronització.":"Cap cau: es mostra l'exemple."}</small>`, 12000);
   }
   PLACES = [...PLACES_SHEET];
-  refrescaFiltres();
   refrescaDies();
   refrescaTot();
   amagaSplash();
