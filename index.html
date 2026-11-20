@@ -54,7 +54,7 @@ body{
 header{
   background:linear-gradient(135deg,rgba(109,74,255,.92),rgba(232,97,140,.82));
   backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  color:#fff;padding:14px 16px calc(10px + env(safe-area-inset-top));padding-top:calc(10px + env(safe-area-inset-top));flex:none;
+  color:#fff;padding:14px 16px 10px;padding-top:calc(10px + env(safe-area-inset-top));flex:none;
   box-shadow:0 4px 24px rgba(109,74,255,.25);
 }
 h1{font-size:19px;font-weight:800;letter-spacing:.2px;display:flex;align-items:center;gap:9px}
@@ -72,7 +72,7 @@ h1 .simbol{display:inline-flex;flex-shrink:0}
   color:var(--muted);box-shadow:0 2px 10px rgba(34,26,68,.07);cursor:pointer;transition:.15s;
 }
 .chip.on{color:#fff;border-color:transparent}
-select.chip{appearance:none;-webkit-appearance:none;font-family:inherit;outline:none;max-width:220px;white-space:nowrap}
+select.chip{appearance:none;-webkit-appearance:none;font-family:inherit;outline:none;max-width:240px;white-space:nowrap}
 /* ---------- Panells: la visibilitat depèn de la classe del body ---------- */
 #content{flex:1;position:relative;overflow:hidden}
 #map{position:absolute;top:0;left:0;right:0;bottom:64px;display:none;border-radius:0}
@@ -328,7 +328,7 @@ let CONFIG = { nom:"Viatge", dates:"", centre:[38.72,-9.14], zoom:13 };
 let PLACES_SHEET = [];
 let PLACES = [];
 let filtreCat = new Set(Object.keys(CATS));
-let diaFiltre = "tots";
+let diaFiltre = "tots";            /* "tots" o clau numèrica del dia ("20261129") */
 let marcadors = {};
 let capesRutes = [];
 
@@ -342,7 +342,9 @@ function num(v){ const n=parseFloat(String(v).replace(",",".")); return isNaN(n)
 /* ---------- Dates i hores ----------
    Entén: "29/11/2026 10:00", "29-11-26 15:30", "29 de novembre 10:00",
    "3 des 18:00", mesos en català i castellà.                             */
-const MESOS_MAP = {}, MES_CURT = ["gen","feb","mar","abr","mai","jun","jul","ago","set","oct","nov","des"];
+const MES_CURT = ["gen","feb","mar","abr","mai","jun","jul","ago","set","oct","nov","des"];
+const MESOS_L  = ["gener","febrer","març","abril","maig","juny","juliol","agost","setembre","octubre","novembre","desembre"];
+const MESOS_MAP = {};
 (function(){
   const mesos = [
     ["gener","gen","enero","ene"],
@@ -385,7 +387,7 @@ function parseDataHora(str){
     if(!nd) return null;
     d = Math.min(+nd[1],31);
   }
-  /* hora hh:mm o hh h mm o "a les hh" */
+  /* hora hh:mm o hh h mm */
   let hh=null, mm=null;
   const hora = s.match(/(\d{1,2})\s*[:h\.]\s*(\d{2})\b/);
   if(hora && +hora[1]<=23){ hh=+hora[1]; mm=+hora[2]; }
@@ -397,7 +399,6 @@ function etiquetaCerta(dt){           /* "29 nov" */
 }
 function etiquetaCompleta(dt, anyMostra){ /* "29 de novembre 2026 · 10:00" */
   if(!dt) return null;
-  const MESOS_L = ["gener","febrer","març","abril","maig","juny","juliol","agost","setembre","octubre","novembre","desembre"];
   let t = `${dt.d} de ${MESOS_L[dt.m]}`;
   if(anyMostra && dt.y!==anyMostra) t += ` ${dt.y}`;
   if(dt.hh!==null) t += ` · ${String(dt.hh).padStart(2,"0")}:${String(dt.mm).padStart(2,"0")}`;
@@ -465,7 +466,6 @@ async function viaOpenSheet(nom){
 
 /* ---------- Llocs ---------- */
 function construeixPlace(raw){
-  /* raw = {nom,cat,lat,lng,dia,inici,fi,origen,desti,nota,link} */
   if(!raw.nom || !raw.cat || raw.lat===null || raw.lng===null) return null;
   const p = {
     nom:raw.nom, cat:raw.cat, lat:raw.lat, lng:raw.lng,
@@ -571,22 +571,18 @@ function aplicaConfig(cfg){
 }
 
 /* ---------- Filtratge ----------
-   diaFiltre guarda l'etiqueta curta ("29 nov") o "tots".
-   Els hotels amb inici i fi es mostren si el dia escollit cau dins del rang. */
-function clauDeEtiqueta(etq){
-  /* reconstruïm la clau des de l'etiqueta i l'any actual */
-  for(const p of PLACES){ if(p.etq===etq && p.inici) return p.inici.key; }
-  return null;
-}
+   diaFiltre = "tots" o la clau numèrica d'un dia (YYYYMMDD).
+   El desplegable de dies cobreix TOTS els dies naturals des de la
+   primera activitat fins a l'última (inclou dies sense res planejat,
+   i els dies intermedis de les estances d'hotel).
+   Els hotels amb inici i fi es mostren si el dia escollit cau dins
+   del rang; la resta de categories, si el seu dia d'inici coincideix. */
 function passaFiltre(p){
   if(!filtreCat.has(p.cat)) return false;
   if(diaFiltre==="tots") return true;
-  if(p.cat==="hotel" && p.inici && p.fi){
-    const k = clauDeEtiqueta(diaFiltre);
-    if(k===null) return p.etq===diaFiltre;
-    return k >= p.inici.key && k <= p.fi.key;   /* rang inclusiu */
-  }
-  return p.etq===diaFiltre;
+  const k = Number(diaFiltre);
+  if(p.cat==="hotel" && p.inici && p.fi) return k>=p.inici.key && k<=p.fi.key;
+  return p.inici ? p.inici.key===k : false;
 }
 
 /* ---------- Mapa ---------- */
@@ -713,7 +709,7 @@ window.copiaCoords = function(i){
   );
 };
 
-/* ---------- Llistes: mostren NOMÉS dia+mes (l'hora va a la fitxa) ---------- */
+/* ---------- Ordenació cronològica ---------- */
 function ordenaLlocs(arr){
   return arr.sort((a,b)=>{
     const ka=a.p.inici?a.p.inici.key:null, kb=b.p.inici?b.p.inici.key:null;
@@ -729,6 +725,8 @@ function ordenaLlocs(arr){
     return (a.p.diaLegacy||"zzz").localeCompare(b.p.diaLegacy||"zzz");
   });
 }
+
+/* ---------- Llistes: mostren NOMÉS dia+mes (l'hora va a la fitxa) ---------- */
 function refrescaLlistes(){
   let h="";
   Object.entries(CATS).forEach(([k,c])=>{
@@ -794,7 +792,7 @@ function refrescaTot(){
   document.getElementById('counts').innerHTML =
     `<span>👁️ ${visibles} visibles</span>` +
     Object.entries(CATS).map(([k,x])=>{
-      const n = PLACES.filter(p=>p.cat===k && passaFiltre({...p, cat:p.cat})).length;
+      const n = PLACES.filter(p=>p.cat===k && passaFiltre(p)).length;
       return `<span>${x.emoji} ${n}</span>`;
     }).join("");
   document.getElementById('titol').textContent = CONFIG.nom;
@@ -841,24 +839,40 @@ selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>`;
 selDia.onchange=()=>{ diaFiltre=selDia.value; refrescaTot(); };
 fCont.appendChild(selDia);
 
+/* El desplegable de dies cobreix el viatge SENCER: un dia per cada
+   dia natural des de la primera activitat fins a l'última,
+   inclosos els dies intermedis de les estances d'hotel.            */
 function refrescaDies(){
-  /* etiquetes úniques ordenades cronològicament */
-  const vist=new Set(); const dies=[];
+  const dates=[];
   PLACES.forEach(p=>{
-    const e = p.etq || (p.diaLegacy?p.diaLegacy.split("·")[0].trim():"");
-    if(e && e!=="(sense dia)" && !vist.has(e)){ vist.add(e); dies.push(e); }
+    if(p.inici) dates.push(p.inici);
+    if(p.fi)    dates.push(p.fi);
+    const dl = parseDataHora(p.diaLegacy);
+    if(dl) dates.push(dl);
   });
-  dies.sort((a,b)=>{
-    const da=parseDataHora(a), db=parseDataHora(b);
-    if(da&&db) return da.key-db.key;
-    if(da) return -1;
-    if(db) return 1;
-    return a.localeCompare(b);
-  });
-  const previ=diaFiltre;
+  const previ = diaFiltre;
+  if(!dates.length){
+    diaFiltre="tots";
+    selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>`;
+    return;
+  }
+  dates.sort((a,b)=>a.key-b.key);
+  const primera=dates[0], ultima=dates[dates.length-1];
+  const anysNous = primera.y !== ultima.y;
+  const dies=[];
+  const cursor = new Date(primera.y, primera.m, primera.d);
+  const fiData = new Date(ultima.y, ultima.m, ultima.d);
+  while(cursor <= fiData){
+    const key = cursor.getFullYear()*10000 + (cursor.getMonth()+1)*100 + cursor.getDate();
+    let label = `${cursor.getDate()} ${MES_CURT[cursor.getMonth()]}`;
+    if(anysNous) label += ` ${cursor.getFullYear()}`;
+    dies.push({key, label});
+    cursor.setDate(cursor.getDate()+1);
+  }
   selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>` +
-    dies.map(d=>`<option value="${d.replace(/"/g,"&quot;")}">${d}</option>`).join("");
-  if(dies.includes(previ)) selDia.value=previ; else { diaFiltre="tots"; selDia.value="tots"; }
+    dies.map(d=>`<option value="${d.key}">${d.label}</option>`).join("");
+  if(previ!=="tots" && dies.some(d=>String(d.key)===String(previ))) selDia.value=String(previ);
+  else { diaFiltre="tots"; selDia.value="tots"; }
 }
 
 /* ---------- Tabs ---------- */
