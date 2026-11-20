@@ -258,8 +258,18 @@ nav button.on{color:var(--pri)}
 <script>
 /* ============================================================
    ⚙️ CONEXIÓ AMB EL GOOGLE SHEETS (LA BASE DE DADES)  ✅ CONNECTAT
-   Pestanyes: "Llocs" (Nom,Categoria,Lat,Lng,Dia,Nota,Link)
-              "Config" (Clau,Valor) — també admet claus color_*
+   Pestanya "Llocs" — capçaleres:
+     Nom, Categoria, Lat, Lng,
+     DataInici  (opcional: "29/11/2026 10:00", "29-11-26 15:30",
+                 "29 de novembre 10:00"…)
+     DataFi     (opcional: útil sobretot per a hotels)
+     Origen     (opcional, per a transports: nom d'un altre lloc
+                 del full o coordenades "41.39, 2.17")
+     Desti      (opcional, per a transports)
+     Nota, Link
+   (La columna antiga "Dia" continua funcionant com a DataInici
+    de text lliure, per compatibilitat.)
+   Pestanya "Config" (Clau,Valor) — també admet claus color_*
    ============================================================ */
 const SHEET_ID = "1tUIidz7rAFAQPBprGGwYSljTZ0styLm6aFFozYILFAs";
 
@@ -279,7 +289,6 @@ function simbolSVG(mida){
     +`<path d="M36.5 19.8 Q42.5 33 36.5 46.2"/></g>`
     +`<path d="M45 36 q8 5 4 12" fill="none" stroke="#d2372c" stroke-width="2.4" stroke-linecap="round"/></svg>`;
 }
-/* favicon = el mateix símbol */
 (function(){
   const fav=document.createElement('link'); fav.rel='icon';
   fav.href='data:image/svg+xml,'+encodeURIComponent(simbolSVG(64));
@@ -306,7 +315,7 @@ const CLAUS_COLOR = {
 
 /* ---------- Exemple (només si tot falla i no hi ha cau) ---------- */
 const PLACES_EXEMPLE = [
-  {nom:"Hotel Mar", cat:"hotel", lat:38.7223, lng:-9.1393, dia:"Dl 12 · check-in 15h", nota:"Habitació doble", link:""},
+  {nom:"Hotel Mar", cat:"hotel", lat:38.7223, lng:-9.1393, iniciTxt:"12/04/2027 15:00", fiTxt:"19/04/2027 11:00", nota:"Habitació doble", link:""},
 ];
 
 /* ============================================================
@@ -321,6 +330,7 @@ let PLACES = [];
 let filtreCat = new Set(Object.keys(CATS));
 let diaFiltre = "tots";
 let marcadors = {};
+let capesRutes = [];
 
 function normalitzaCat(v){
   const s = String(v||"").trim().toLowerCase()
@@ -329,11 +339,10 @@ function normalitzaCat(v){
 }
 function num(v){ const n=parseFloat(String(v).replace(",",".")); return isNaN(n)?null:n; }
 
-/* ---------- Ordenació cronològica del camp "Dia" ----------
-   Entén: "29 de novembre", "3 dec", "Dic 3", "12/11/2026",
-   "3 novembre · 10:00", mesos en català i castellà.
-   Retorna un número; null si no s'hi reconeix cap mes.      */
-const MESOS_MAP = {};
+/* ---------- Dates i hores ----------
+   Entén: "29/11/2026 10:00", "29-11-26 15:30", "29 de novembre 10:00",
+   "3 des 18:00", mesos en català i castellà.                             */
+const MESOS_MAP = {}, MES_CURT = ["gen","feb","mar","abr","mai","jun","jul","ago","set","oct","nov","des"];
 (function(){
   const mesos = [
     ["gener","gen","enero","ene"],
@@ -351,31 +360,50 @@ const MESOS_MAP = {};
   ];
   mesos.forEach((variants,m)=>variants.forEach(v=>MESOS_MAP[v]=m));
 })();
-function ordreDeDia(dia){
-  if(!dia) return null;
-  const s = String(dia).toLowerCase()
+function txtNorm(s){
+  return String(s||"").toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-  let mes=null;
-  /* busquem el nom d'un mes al text */
-  for(const [nom,m] of Object.entries(MESOS_MAP)){
-    const re = new RegExp("(^|[^a-z])"+nom+"([^a-z]|$)");
-    if(re.test(s)){ mes=m; break; }
+}
+/* retorna {y,m,d,hh,mm,key} o null */
+function parseDataHora(str){
+  if(!str) return null;
+  const s = txtNorm(str);
+  let y=null,m=null,d=null;
+  /* format numèric dd/mm/aa o dd-mm-yyyy */
+  const numeric = s.match(/(\d{1,2})\s*[\/\-.]\s*(\d{1,2})(?:\s*[\/\-.]\s*(\d{2,4}))?/);
+  if(numeric){
+    d = Math.min(+numeric[1],31); m = Math.min(+numeric[2],12)-1;
+    if(numeric[3]) y = +numeric[3]<100 ? 2000+(+numeric[3]) : +numeric[3];
+  }else{
+    /* nom de mes dins el text */
+    for(const [nom,mi] of Object.entries(MESOS_MAP)){
+      const re = new RegExp("(^|[^a-z])"+nom+"([^a-z]|$)");
+      if(re.test(s)){ m=mi; break; }
+    }
+    if(m===null) return null;
+    const nd = s.match(/(\d{1,2})\b/);
+    if(!nd) return null;
+    d = Math.min(+nd[1],31);
   }
-  if(mes===null) return null;
-  /* dia del mes: el primer número de l'string (abans del "·") */
-  const numDia = s.match(/(\d{1,2})\b/);
-  const any = s.match(/\b(20\d{2})\b/);
-  const d = numDia ? Math.min(+numDia[1],31) : 1;
-  const y = any ? +any[1] : 2000; /* sense any explícit: any base per poder comparar */
-  return (y*10000) + ((mes+1)*100) + d;
+  /* hora hh:mm o hh h mm o "a les hh" */
+  let hh=null, mm=null;
+  const hora = s.match(/(\d{1,2})\s*[:h\.]\s*(\d{2})\b/);
+  if(hora && +hora[1]<=23){ hh=+hora[1]; mm=+hora[2]; }
+  if(y===null) y = new Date().getFullYear();
+  return {y, m, d, hh, mm, key: y*10000+(m+1)*100+d};
 }
-function comparaPorDia(a,b){
-  const ka = ordreDeDia(a), kb = ordreDeDia(b);
-  if(ka!==null && kb!==null) return ka - kb;              /* dates reals: cronològic */
-  if(ka!==null && kb===null) return -1;                    /* amb data reconeguda primer */
-  if(ka===null && kb!==null) return 1;
-  return (a||"").localeCompare(b||"");                     /* sinó, com abans */
+function etiquetaCerta(dt){           /* "29 nov" */
+  return dt ? `${dt.d} ${MES_CURT[dt.m]}` : null;
 }
+function etiquetaCompleta(dt, anyMostra){ /* "29 de novembre 2026 · 10:00" */
+  if(!dt) return null;
+  const MESOS_L = ["gener","febrer","març","abril","maig","juny","juliol","agost","setembre","octubre","novembre","desembre"];
+  let t = `${dt.d} de ${MESOS_L[dt.m]}`;
+  if(anyMostra && dt.y!==anyMostra) t += ` ${dt.y}`;
+  if(dt.hh!==null) t += ` · ${String(dt.hh).padStart(2,"0")}:${String(dt.mm).padStart(2,"0")}`;
+  return t;
+}
+function iniciaDe(p){ return parseDataHora(p.iniciTxt) || parseDataHora(p.diaLegacy); }
 
 function parseCSV(text){
   const rows=[]; let row=[], cell="", q=false;
@@ -434,30 +462,63 @@ async function viaOpenSheet(nom){
   if(!Array.isArray(d)) throw new Error("format inesperat");
   return d;
 }
+
+/* ---------- Llocs ---------- */
+function construeixPlace(raw){
+  /* raw = {nom,cat,lat,lng,dia,inici,fi,origen,desti,nota,link} */
+  if(!raw.nom || !raw.cat || raw.lat===null || raw.lng===null) return null;
+  const p = {
+    nom:raw.nom, cat:raw.cat, lat:raw.lat, lng:raw.lng,
+    diaLegacy:(raw.dia||"").trim(),
+    iniciTxt:(raw.inici||"").trim(), fiTxt:(raw.fi||"").trim(),
+    origen:(raw.origen||"").trim(), desti:(raw.desti||"").trim(),
+    nota:raw.nota||"", link:raw.link||"",
+  };
+  p.inici = iniciaDe(p);
+  p.fi    = parseDataHora(p.fiTxt);
+  p.etq   = etiquetaCerta(p.inici);                      /* "29 nov" per a llistes */
+  return p;
+}
 function rowsCsvAPlaces(csvTxt){
   const rows = parseCSV(csvTxt);
   const head = (rows.shift()||[]).map(h=>String(h).trim().toLowerCase());
   const idx = n => head.indexOf(n);
-  return rows.map(r=>({
-    nom:r[idx("nom")]||"", cat:normalitzaCat(r[idx("categoria")]),
+  return rows.map(r=>construeixPlace({
+    nom:r[idx("nom")], cat:normalitzaCat(r[idx("categoria")]),
     lat:num(r[idx("lat")]), lng:num(r[idx("lng")]),
-    dia:r[idx("dia")]||"", nota:r[idx("nota")]||"", link:r[idx("link")]||"",
-  })).filter(p=>p.nom && p.cat && p.lat!==null && p.lng!==null);
+    dia:r[idx("dia")],
+    inici:idx("datainici")>=0?r[idx("datainici")]:undefined,
+    fi:   idx("datafi")>=0?r[idx("datafi")]:undefined,
+    origen:idx("origen")>=0?r[idx("origen")]:undefined,
+    desti: idx("desti")>=0?r[idx("desti")]:undefined,
+    nota:r[idx("nota")], link:r[idx("link")],
+  })).filter(Boolean);
 }
 function jsonpAPlaces(cols, rows){
   const idx = n => cols.indexOf(n);
-  return rows.map(r=>({
-    nom:r[idx("nom")]||"", cat:normalitzaCat(r[idx("categoria")]),
+  return rows.map(r=>construeixPlace({
+    nom:r[idx("nom")], cat:normalitzaCat(r[idx("categoria")]),
     lat:num(r[idx("lat")]), lng:num(r[idx("lng")]),
-    dia:r[idx("dia")]||"", nota:r[idx("nota")]||"", link:r[idx("link")]||"",
-  })).filter(p=>p.nom && p.cat && p.lat!==null && p.lng!==null);
+    dia:r[idx("dia")],
+    inici:idx("datainici")>=0?r[idx("datainici")]:undefined,
+    fi:   idx("datafi")>=0?r[idx("datafi")]:undefined,
+    origen:idx("origen")>=0?r[idx("origen")]:undefined,
+    desti: idx("desti")>=0?r[idx("desti")]:undefined,
+    nota:r[idx("nota")], link:r[idx("link")],
+  })).filter(Boolean);
 }
 function objesAPlaces(objes){
-  return objes.map(o=>({
-    nom:o["Nom"]||o["nom"]||"", cat:normalitzaCat(o["Categoria"]||o["categoria"]),
+  const g=(o,a,b)=>o[a]??o[b]??"";
+  return objes.map(o=>construeixPlace({
+    nom:o["Nom"]||o["nom"], cat:normalitzaCat(o["Categoria"]||o["categoria"]),
     lat:num(o["Lat"]??o["lat"]), lng:num(o["Lng"]??o["lng"]),
-    dia:o["Dia"]||o["dia"]||"", nota:o["Nota"]||o["nota"]||"", link:o["Link"]||o["link"]||"",
-  })).filter(p=>p.nom && p.cat && p.lat!==null && p.lng!==null);
+    dia:g(o,"Dia","dia"),
+    inici:g(o,"DataInici","datainici"),
+    fi:   g(o,"DataFi","datafi"),
+    origen:g(o,"Origen","origen"),
+    desti: g(o,"Desti","desti"),
+    nota:o["Nota"]||o["nota"], link:o["Link"]||o["link"],
+  })).filter(Boolean);
 }
 async function carregaPestanyaLlocs(){
   const intents = [];
@@ -509,11 +570,23 @@ function aplicaConfig(cfg){
   });
 }
 
-/* ---------- Filtratge ---------- */
+/* ---------- Filtratge ----------
+   diaFiltre guarda l'etiqueta curta ("29 nov") o "tots".
+   Els hotels amb inici i fi es mostren si el dia escollit cau dins del rang. */
+function clauDeEtiqueta(etq){
+  /* reconstruïm la clau des de l'etiqueta i l'any actual */
+  for(const p of PLACES){ if(p.etq===etq && p.inici) return p.inici.key; }
+  return null;
+}
 function passaFiltre(p){
   if(!filtreCat.has(p.cat)) return false;
-  if(diaFiltre!=="tots" && (p.dia||"")!==diaFiltre) return false;
-  return true;
+  if(diaFiltre==="tots") return true;
+  if(p.cat==="hotel" && p.inici && p.fi){
+    const k = clauDeEtiqueta(diaFiltre);
+    if(k===null) return p.etq===diaFiltre;
+    return k >= p.inici.key && k <= p.fi.key;   /* rang inclusiu */
+  }
+  return p.etq===diaFiltre;
 }
 
 /* ---------- Mapa ---------- */
@@ -525,14 +598,39 @@ function icona(cat){
   return L.divIcon({className:"", html:`<div class="pin" style="background:${c.color}"><span>${c.emoji}</span></div>`,
     iconSize:[34,34], iconAnchor:[17,32]});
 }
+/* resol un punt: coordenades "41.39, 2.17" o nom d'un altre lloc del full */
+function resolPunt(txt){
+  if(!txt) return null;
+  const coords = txt.match(/^\s*(-?\d+(?:[.,]\d+)?)\s*[,;\s]\s*(-?\d+(?:[.,]\d+)?)\s*$/);
+  if(coords){
+    const la=num(coords[1]), ln=num(coords[2]);
+    if(la!==null && ln!==null) return [la,ln];
+  }
+  const t = txtNorm(txt).trim();
+  let candidat = PLACES.find(p=>txtNorm(p.nom)===t);
+  if(!candidat) candidat = PLACES.find(p=>txtNorm(p.nom).includes(t) || t.includes(txtNorm(p.nom)));
+  return candidat ? [candidat.lat, candidat.lng] : null;
+}
 function refrescaMarcadors(){
   Object.values(marcadors).forEach(m=>map.removeLayer(m));
-  marcadors={};
+  capesRutes.forEach(l=>map.removeLayer(l));
+  marcadors={}; capesRutes=[];
   PLACES.forEach((p,i)=>{
     if(!passaFiltre(p)) return;
     const m = L.marker([p.lat,p.lng],{icon:icona(p.cat), riseOnHover:true}).addTo(map);
     m.on('click', ()=>obreFitxa(i));
     marcadors[i]=m;
+    /* traç origen→destí per a transports */
+    if(p.cat==="transport" && (p.origen || p.desti)){
+      const a = p.origen ? resolPunt(p.origen) : [p.lat,p.lng];
+      const b = p.desti  ? resolPunt(p.desti)  : [p.lat,p.lng];
+      if(a && b){
+        const col = getComputedStyle(document.documentElement).getPropertyValue('--c-transport').trim() || '#0ea5a4';
+        const linia = L.polyline([a,b],{color:col, weight:3, opacity:.85, dashArray:'7 9'}).addTo(map);
+        const pinta = pt=>L.circleMarker(pt,{radius:5, color:'#fff', weight:2, fillColor:col, fillOpacity:1}).addTo(map);
+        capesRutes.push(linia, pinta(a), pinta(b));
+      }
+    }
   });
 }
 
@@ -551,7 +649,18 @@ function obreFitxa(i){
   document.getElementById('f-cat').textContent = c.nom;
   document.getElementById('f-cat').style.color = c.color;
   let cos = "";
-  if(p.dia) cos += `<div class="fila"><div class="fic">📅</div><div><div class="flabel">Quan</div><div class="fvalor" style="font-weight:700;color:${c.color}">${p.dia}</div></div></div>`;
+  /* DATA COMPLETA amb hora, només aquí */
+  const anyRef = new Date().getFullYear();
+  if(p.inici){
+    cos += `<div class="fila"><div class="fic">📅</div><div><div class="flabel">Inici</div><div class="fvalor" style="font-weight:700;color:${c.color}">${etiquetaCompleta(p.inici, anyRef)}</div></div></div>`;
+    if(p.cat!=="hotel" && p.diaLegacy && !parseDataHora(p.iniciTxt)) cos += `<div class="fila"><div class="fic">ℹ️</div><div><div class="flabel">Detall</div><div class="fvalor">${p.diaLegacy}</div></div></div>`;
+  }else if(p.diaLegacy){
+    cos += `<div class="fila"><div class="fic">📅</div><div><div class="flabel">Quan</div><div class="fvalor" style="font-weight:700;color:${c.color}">${p.diaLegacy}</div></div></div>`;
+  }
+  if(p.fi) cos += `<div class="fila"><div class="fic">🏁</div><div><div class="flabel">Fins</div><div class="fvalor" style="font-weight:700;color:${c.color}">${etiquetaCompleta(p.fi, anyRef)}</div></div></div>`;
+  if(p.cat==="transport" && (p.origen||p.desti)){
+    cos += `<div class="fila"><div class="fic">🧭</div><div><div class="flabel">Trajecte</div><div class="fvalor">${p.origen||"⭕"} ➜ ${p.desti||"⭕"}</div></div></div>`;
+  }
   if(p.nota) cos += `<div class="fila"><div class="fic">📝</div><div><div class="flabel">Notes</div><div class="fvalor">${p.nota}</div></div></div>`;
   cos += `<div class="fila"><div class="fic">📍</div><div><div class="flabel">Ubicació</div><div class="fvalor">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</div></div></div>`;
   if(p.link) cos += `<div class="fila"><div class="fic">🔗</div><div style="min-width:0"><div class="flabel">Enllaç</div><div class="fvalor" style="word-break:break-all"><a href="${p.link}" target="_blank" style="color:var(--pri);font-weight:700">${p.link}</a></div></div></div>`;
@@ -564,7 +673,6 @@ function obreFitxa(i){
   fitxa.classList.remove('expans');
   fFull.scrollTop = 0;
   fFull.classList.remove('anim'); void fFull.offsetWidth; fFull.classList.add('anim');
-  /* Centra el lloc al mapa de fons */
   const centre = map.getCenter();
   if(Math.abs(centre.lat-p.lat)>1e-4 || Math.abs(centre.lng-p.lng)>1e-4){
     map.flyTo([p.lat,p.lng], Math.max(map.getZoom()||13, 15), {duration:.6});
@@ -576,7 +684,6 @@ document.getElementById('f-tancar-fons').onclick = tancaFitxa;
 document.getElementById('f-agarra').onclick = ()=>fitxa.classList.toggle('expans');
 document.getElementById('f-cap').onclick = (e)=>{ if(e.target.closest('a,button')) return; fitxa.classList.toggle('expans'); };
 
-/* Gestos: lliscar amunt = expandir · lliscar avall = tancar */
 fFull.addEventListener('touchstart', e=>{
   dragY = e.touches[0].clientY; dragActiu = true;
 }, {passive:true});
@@ -606,47 +713,65 @@ window.copiaCoords = function(i){
   );
 };
 
-/* ---------- Llistes (ordenades cronològicament pel camp Dia) ---------- */
+/* ---------- Llistes: mostren NOMÉS dia+mes (l'hora va a la fitxa) ---------- */
+function ordenaLlocs(arr){
+  return arr.sort((a,b)=>{
+    const ka=a.p.inici?a.p.inici.key:null, kb=b.p.inici?b.p.inici.key:null;
+    if(ka!==null && kb!==null){
+      if(ka!==kb) return ka-kb;
+      const ta=a.p.inici.hh!==null?a.p.inici.hh*60+a.p.inici.mm:null;
+      const tb=b.p.inici.hh!==null?b.p.inici.hh*60+b.p.inici.mm:null;
+      if(ta!==null && tb!==null && ta!==tb) return ta-tb;
+      return (a.p.diaLegacy||"").localeCompare(b.p.diaLegacy||"");
+    }
+    if(ka!==null) return -1;
+    if(kb!==null) return 1;
+    return (a.p.diaLegacy||"zzz").localeCompare(b.p.diaLegacy||"zzz");
+  });
+}
 function refrescaLlistes(){
   let h="";
   Object.entries(CATS).forEach(([k,c])=>{
     if(!filtreCat.has(k)) return;
-    const llocs=PLACES.map((p,i)=>({p,i}))
-      .filter(o=>o.p.cat===k && passaFiltre(o.p))
-      .sort((a,b)=>comparaPorDia(a.p.dia, b.p.dia));
+    const llocs=ordenaLlocs(PLACES.map((p,i)=>({p,i})).filter(o=>o.p.cat===k && passaFiltre(o.p)));
     if(!llocs.length) return;
     h+=`<div class="cat-title"><span class="dot" style="background:${c.color};color:${c.color}"></span>${c.nom} <small>(${llocs.length})</small></div>`;
     llocs.forEach(({p,i})=>{
-      h+=`<div class="item" onclick="obreFitxa(${i})"><div class="ico">${c.emoji}</div><div style="flex:1;min-width:0"><b>${p.nom}</b>${p.nota?`<p>${p.nota}</p>`:""}${p.dia?`<div class="meta">📅 ${p.dia}</div>`:""}</div><button class="go" onclick="event.stopPropagation();vesA(${i})">🗺️</button></div>`;
+      const dataCurta = p.etq || p.diaLegacy;
+      h+=`<div class="item" onclick="obreFitxa(${i})"><div class="ico">${c.emoji}</div><div style="flex:1;min-width:0"><b>${p.nom}</b>${p.nota?`<p>${p.nota}</p>`:""}${dataCurta?`<div class="meta">📅 ${dataCurta}</div>`:""}</div><button class="go" onclick="event.stopPropagation();vesA(${i})">🗺️</button></div>`;
     });
   });
   document.getElementById('llistes').innerHTML = h || `<p style="text-align:center;color:var(--muted);margin-top:40px">Cap lloc amb els filtres actius 🙂</p>`;
 }
 /* ---------- Itinerari (grups de dia en ordre cronològic) ---------- */
-function grupDeDia(dia){
-  if(!dia) return "(sense dia)";
-  const i = dia.indexOf("·");
-  return i>0 ? dia.slice(0,i).trim() : dia.trim();
-}
 function refrescaItinerari(){
   const vis = PLACES.map((p,i)=>({p,i})).filter(o=>passaFiltre(o.p));
   const grups=[];
   vis.forEach(o=>{
-    const g=grupDeDia(o.p.dia);
+    const g = o.p.etq || o.p.diaLegacy || "(sense dia)";
     let gp=grups.find(x=>x.nom===g);
-    if(!gp){ gp={nom:g, llocs:[], exemplar:o.p.dia}; grups.push(gp); }
+    if(!gp){ gp={nom:g, llocs:[], exemplar:o.p}; grups.push(gp); }
     gp.llocs.push(o);
   });
-  /* els grups de dia també en ordre cronològic */
-  grups.sort((a,b)=>comparaPorDia(a.exemplar, b.exemplar));
+  grups.sort((a,b)=>{
+    const ka=a.exemplar.inici?a.exemplar.inici.key:null;
+    const kb=b.exemplar.inici?b.exemplar.inici.key:null;
+    if(ka!==null && kb!==null) return ka-kb;
+    if(ka!==null) return -1;
+    if(kb!==null) return 1;
+    return (a.nom||"").localeCompare(b.nom||"");
+  });
   let h="";
   grups.forEach(g=>{
     h+=`<div class="dia-bloc"><div class="dia-cap">📆 ${g.nom} <span class="ndia">${g.llocs.length}</span></div><div class="timeline">`;
-    g.llocs.sort((a,b)=>comparaPorDia(a.p.dia, b.p.dia)).forEach(({p,i})=>{
+    ordenaLlocs(g.llocs).forEach(({p,i})=>{
       const c=CATS[p.cat]||{emoji:"📍",color:"#888"};
-      const hora=(p.dia&&p.dia.indexOf("·")>0)?p.dia.split("·").slice(1).join("·").trim():"";
+      const hora=(p.inici && p.inici.hh!==null)
+        ? `${String(p.inici.hh).padStart(2,"0")}:${String(p.inici.mm).padStart(2,"0")}`
+        : (p.diaLegacy && p.diaLegacy.indexOf("·")>0 ? p.diaLegacy.split("·").slice(1).join("·").trim() : "");
+      const thoraTxt = hora || c.emoji+" "+(CATS[p.cat]?CATS[p.cat].nom:"");
       h+=`<div class="tstop" style="--dot:${c.color}">
-        <div class="thora">${hora||c.emoji+" "+(CATS[p.cat]?CATS[p.cat].nom:"")}</div>
+        <div class="thora">${thoraTxt}</div>
         <div class="item" style="margin-bottom:0" onclick="obreFitxa(${i})"><div class="ico">${c.emoji}</div>
           <div style="flex:1;min-width:0"><b>${p.nom}</b>${p.nota?`<p>${p.nota}</p>`:""}</div>
           <button class="go" onclick="event.stopPropagation();vesA(${i})">🗺️</button></div>
@@ -669,7 +794,7 @@ function refrescaTot(){
   document.getElementById('counts').innerHTML =
     `<span>👁️ ${visibles} visibles</span>` +
     Object.entries(CATS).map(([k,x])=>{
-      const n = PLACES.filter(p=>p.cat===k && (diaFiltre==="tots" || p.dia===diaFiltre)).length;
+      const n = PLACES.filter(p=>p.cat===k && passaFiltre({...p, cat:p.cat})).length;
       return `<span>${x.emoji} ${n}</span>`;
     }).join("");
   document.getElementById('titol').textContent = CONFIG.nom;
@@ -682,7 +807,6 @@ function refrescaTot(){
 /* ---------- Filtres ---------- */
 const fCont = document.getElementById('filtres');
 
-/* Botó "Mostra-ho tot" (un sol click) */
 const bTotes=document.createElement('button');
 bTotes.className='chip on';
 bTotes.textContent='✨ Tot';
@@ -718,9 +842,19 @@ selDia.onchange=()=>{ diaFiltre=selDia.value; refrescaTot(); };
 fCont.appendChild(selDia);
 
 function refrescaDies(){
-  const dies=[...new Set(PLACES.map(p=>grupDeDia(p.dia)).filter(d=>d!=="(sense dia)"))];
-  /* el desplegable de dies també en ordre cronològic */
-  dies.sort(comparaPorDia);
+  /* etiquetes úniques ordenades cronològicament */
+  const vist=new Set(); const dies=[];
+  PLACES.forEach(p=>{
+    const e = p.etq || (p.diaLegacy?p.diaLegacy.split("·")[0].trim():"");
+    if(e && e!=="(sense dia)" && !vist.has(e)){ vist.add(e); dies.push(e); }
+  });
+  dies.sort((a,b)=>{
+    const da=parseDataHora(a), db=parseDataHora(b);
+    if(da&&db) return da.key-db.key;
+    if(da) return -1;
+    if(db) return 1;
+    return a.localeCompare(b);
+  });
   const previ=diaFiltre;
   selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>` +
     dies.map(d=>`<option value="${d.replace(/"/g,"&quot;")}">${d}</option>`).join("");
