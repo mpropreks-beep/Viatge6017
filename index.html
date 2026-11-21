@@ -192,7 +192,7 @@ nav button.on{color:var(--pri)}
 #gate button:active{transform:scale(.98)}
 </style>
 <!-- Fitxer d'estils editable per tu (opcional): si existeix, sobreescriu els colors de dalt -->
-<link rel="stylesheet" href="estils.css">
+<link rel="stylesheet" href="estils.css?v=31">
 </head>
 <body class="view-map">
 
@@ -273,6 +273,12 @@ nav button.on{color:var(--pri)}
    ============================================================ */
 const SHEET_ID = "1tUIidz7rAFAQPBprGGwYSljTZ0styLm6aFFozYILFAs";
 
+/* ---------- Marca de versió ----------
+   Cada vegada que publiquis una versió nova a GitHub, canvia aquest
+   número. Si el mòbil no mostra el número nou a la capçalera, vol dir
+   que està executant una còpia antiga des de la caché.               */
+const VERSIO = "v3.1";
+
 /* ---------- Contrasenya ---------- */
 const PASSWORD = "LaCasita";
 const AUTH_KEY = "viatge_auth_v1";
@@ -297,7 +303,8 @@ function simbolSVG(mida){
 document.getElementById('splash-logo').innerHTML = simbolSVG(64);
 document.getElementById('h-simbol').innerHTML = simbolSVG(24);
 
-/* ---------- Categories fixes ---------- */
+/* ---------- Categories fixes ----------
+   Els noms d'aquí són FIXOS: cap dada del Sheet els pot canviar.     */
 const CATS = {
   hotel:      {emoji:"🏨", nom:"Hotels",     color:"var(--c-hotel)"},
   activitat:  {emoji:"🎡", nom:"Activitats", color:"var(--c-activitat)"},
@@ -798,8 +805,8 @@ function refrescaTot(){
   document.getElementById('titol').textContent = CONFIG.nom;
   document.getElementById('dates').textContent = CONFIG.dates;
   document.getElementById('sincc').textContent = PLACES_SHEET.length
-    ? `🔗 Sincronitzat amb Google Sheets · ${new Date().toLocaleString('ca-ES')}`
-    : "⚠️ Sense dades del Sheet";
+    ? `🔗 Sincronitzat · ${VERSIO} · ${new Date().toLocaleString('ca-ES')}`
+    : `⚠️ Sense dades · ${VERSIO}`;
 }
 
 /* ---------- Filtres ---------- */
