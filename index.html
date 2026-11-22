@@ -393,22 +393,51 @@ async function resolLinkCurt(url){
   const clau = "curt:"+url;
   const cau = geoCauGet(clau);
   if(cau) return cau;
-  const intents = [
-    "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
-    "https://corsproxy.io/?" + encodeURIComponent(url)
-  ];
-  for(const u of intents){
-    try{
-      const r = await fetch(u);
-      const txt = await r.text();
-      let m = txt.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
-      if(!m) m = txt.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
-      if(m){
-        const v = [parseFloat(m[1]), parseFloat(m[2])];
-        if(isFinite(v[0]) && isFinite(v[1])){ geoCauSet(clau, v); return v; }
+  /* Estratègia 1: allorigins /get retorna JSON amb la URL FINAL de la
+     redirecció — és allà on Google posa les coordenades (@lat,lng) */
+  try{
+    const r = await fetch("https://api.allorigins.win/get?url=" + encodeURIComponent(url));
+    const j = await r.json();
+    const diana = (j && j.status && j.status.url) || "";
+    const contingut = (j && j.contents) || "";
+    let m = diana.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/)
+         || diana.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/)
+         || diana.match(/(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if(!m) m = contingut.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/)
+         || contingut.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+    if(m){
+      const v = [parseFloat(m[1]), parseFloat(m[2])];
+      if(isFinite(v[0]) && isFinite(v[1]) && Math.abs(v[0])<=90 && Math.abs(v[1])<=180){
+        geoCauSet(clau, v); return v;
       }
-    }catch(e){}
-  }
+    }
+    console.warn("[Viatge] Link curt: no hi he trobat coordenades. URL final:", diana || "(cap)");
+  }catch(e){ console.warn("[Viatge] Link curt via allorigins/get ha fallat:", e); }
+  /* Estratègia 2: corsproxy seguint la redirecció, buscant dins el HTML */
+  try{
+    const r2 = await fetch("https://corsproxy.io/?" + encodeURIComponent(url));
+    const t2 = await r2.text();
+    const m2 = t2.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/)
+            || t2.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+    if(m2){
+      const v2 = [parseFloat(m2[1]), parseFloat(m2[2])];
+      if(isFinite(v2[0]) && isFinite(v2[1])){ geoCauSet(clau, v2); return v2; }
+    }
+    console.warn("[Viatge] Link curt via corsproxy: res trobat.");
+  }catch(e){ console.warn("[Viatge] Link curt via corsproxy ha fallat:", e); }
+  /* Estratègia 3: servei unshorten (revela la URL de destinació) */
+  try{
+    const r3 = await fetch("https://unshorten.me/json/" + encodeURIComponent(url));
+    const j3 = await r3.json();
+    const d3 = (j3 && (j3.resolved_url || j3.ResolvedURL)) || "";
+    const m3 = d3.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/)
+            || d3.match(/(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if(m3){
+      const v3 = [parseFloat(m3[1]), parseFloat(m3[2])];
+      if(isFinite(v3[0]) && isFinite(v3[1])){ geoCauSet(clau, v3); return v3; }
+    }
+    console.warn("[Viatge] Link curt via unshorten: URL revelada =", d3 || "(cap)");
+  }catch(e){ console.warn("[Viatge] Link curt via unshorten ha fallat:", e); }
   return null;
 }
 async function resolUbicacions(llistat){
