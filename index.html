@@ -268,6 +268,10 @@ nav button.on{color:var(--pri)}
      Origen     (opcional, per a transports: nom d'un altre lloc
                  del full o coordenades "41.39, 2.17")
      Desti      (opcional, per a transports)
+     Maps      (opcional: enganxa un link de Google Maps i s'hi
+                 extreuen les coordenades automàticament)
+     Adreça    (opcional: "Sagrada Família, Barcelona" — es
+                 converteix via Nominatim/OpenStreetMap)
      Nota, Link
    (La columna antiga "Dia" continua funcionant com a DataInici
     de text lliure, per compatibilitat.)
@@ -279,7 +283,7 @@ const SHEET_ID = "1tUIidz7rAFAQPBprGGwYSljTZ0styLm6aFFozYILFAs";
    Cada vegada que publiquis una versió nova a GitHub, canvia aquest
    número. Si el mòbil no mostra el número nou a la capçalera, vol dir
    que està executant una còpia antiga des de la caché.               */
-const VERSIO = "v3.3";
+const VERSIO = "v3.4";
 
 /* ---------- Contrasenya ---------- */
 const PASSWORD = "LaCasita";
@@ -347,6 +351,54 @@ function normalitzaCat(v){
   return CATS[s] ? s : null;
 }
 function num(v){ const n=parseFloat(String(v).replace(",",".")); return isNaN(n)?null:n; }
+
+/* ---------- v3.4: ubicació per link de Google Maps o adreça ---------- */
+function coordsDeMapsLink(txt){
+  if(!txt) return null;
+  const t = decodeURIComponent(String(txt).trim());
+  let m = t.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if(!m) m = t.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+  if(!m) m = t.match(/[?&]q=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
+  if(m){
+    const la = parseFloat(m[1]), ln = parseFloat(m[2]);
+    if(isFinite(la) && isFinite(ln)) return [la,ln];
+  }
+  return null;
+}
+const LS_GEO = "viatge_geo_cache";
+function geoCauGet(clau){ try{ return JSON.parse(localStorage.getItem(LS_GEO)||"{}")[clau] ?? null; }catch(e){ return null; } }
+function geoCauSet(clau,val){ try{ const c=JSON.parse(localStorage.getItem(LS_GEO)||"{}"); c[clau]=val; localStorage.setItem(LS_GEO,JSON.stringify(c)); }catch(e){} }
+let geoCua = Promise.resolve();   /* cua per respectar el límit de Nominatim (1 cerca/segon) */
+function geocodifica(adreca){
+  return new Promise(res=>{
+    geoCua = geoCua.then(async ()=>{
+      const clau = "geo:"+adreca.toLowerCase();
+      const cau = geoCauGet(clau);
+      if(cau){ res(cau); return; }
+      try{
+        const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(adreca), {headers:{"Accept-Language":"ca"}});
+        const d = await r.json();
+        if(Array.isArray(d) && d.length){
+          const val=[parseFloat(d[0].lat), parseFloat(d[0].lon)];
+          geoCauSet(clau,val); res(val);
+        }else{ geoCauSet(clau,null); res(null); }
+      }catch(e){ res(null); }
+      await new Promise(r2=>setTimeout(r2,1100));
+    });
+  });
+}
+async function resolUbicacions(llistat){
+  for(const p of llistat){
+    if(p.lat!==null && p.lng!==null) continue;
+    const delLink = coordsDeMapsLink(p.mapsTxt);
+    if(delLink){ p.lat=delLink[0]; p.lng=delLink[1]; continue; }
+    if(p.adrecaTxt){
+      const g = await geocodifica(p.adrecaTxt);
+      if(g){ p.lat=g[0]; p.lng=g[1]; }
+    }
+  }
+  return llistat;
+}
 
 /* ---------- Dates i hores ----------
    Entén: "29/11/2026 10:00", "29-11-26 15:30", "29 de novembre 10:00",
@@ -475,9 +527,12 @@ async function viaOpenSheet(nom){
 
 /* ---------- Llocs ---------- */
 function construeixPlace(raw){
-  if(!raw.nom || !raw.cat || raw.lat===null || raw.lng===null) return null;
+  if(!raw.nom || !raw.cat) return null;
   const p = {
-    nom:raw.nom, cat:raw.cat, lat:raw.lat, lng:raw.lng,
+    nom:raw.nom, cat:raw.cat,
+    lat:raw.lat ?? null, lng:raw.lng ?? null,
+    mapsTxt:(raw.maps||"").trim(),
+    adrecaTxt:(raw.adreca||"").trim(),
     diaLegacy:(raw.dia||"").trim(),
     iniciTxt:(raw.inici||"").trim(), fiTxt:(raw.fi||"").trim(),
     origen:(raw.origen||"").trim(), desti:(raw.desti||"").trim(),
@@ -494,7 +549,7 @@ function rowsCsvAPlaces(csvTxt){
   const idx = n => head.indexOf(n);
   return rows.map(r=>construeixPlace({
     nom:r[idx("nom")], cat:normalitzaCat(r[idx("categoria")]),
-    lat:num(r[idx("lat")]), lng:num(r[idx("lng")]),
+    lat:num(r[idx("lat")]), lng:num(r[idx("lng")]), maps:idx("maps")>=0?r[idx("maps")]:undefined, adreca:idx("adreca")>=0?r[idx("adreca")]:undefined,
     dia:r[idx("dia")],
     inici:idx("datainici")>=0?r[idx("datainici")]:undefined,
     fi:   idx("datafi")>=0?r[idx("datafi")]:undefined,
@@ -507,7 +562,7 @@ function jsonpAPlaces(cols, rows){
   const idx = n => cols.indexOf(n);
   return rows.map(r=>construeixPlace({
     nom:r[idx("nom")], cat:normalitzaCat(r[idx("categoria")]),
-    lat:num(r[idx("lat")]), lng:num(r[idx("lng")]),
+    lat:num(r[idx("lat")]), lng:num(r[idx("lng")]), maps:idx("maps")>=0?r[idx("maps")]:undefined, adreca:idx("adreca")>=0?r[idx("adreca")]:undefined,
     dia:r[idx("dia")],
     inici:idx("datainici")>=0?r[idx("datainici")]:undefined,
     fi:   idx("datafi")>=0?r[idx("datafi")]:undefined,
@@ -520,7 +575,7 @@ function objesAPlaces(objes){
   const g=(o,a,b)=>o[a]??o[b]??"";
   return objes.map(o=>construeixPlace({
     nom:o["Nom"]||o["nom"], cat:normalitzaCat(o["Categoria"]||o["categoria"]),
-    lat:num(o["Lat"]??o["lat"]), lng:num(o["Lng"]??o["lng"]),
+    lat:num(o["Lat"]??o["lat"]), lng:num(o["Lng"]??o["lng"]), maps:(o["Maps"]??o["maps"])??"", adreca:(o["Adreça"]??o["adreça"]??o["Adreca"]??o["adreca"])??"",
     dia:g(o,"Dia","dia"),
     inici:g(o,"DataInici","datainici"),
     fi:   g(o,"DataFi","datafi"),
@@ -619,7 +674,7 @@ function refrescaMarcadors(){
   capesRutes.forEach(l=>map.removeLayer(l));
   marcadors={}; capesRutes=[];
   PLACES.forEach((p,i)=>{
-    if(!passaFiltre(p)) return;
+    if(!passaFiltre(p) || p.lat===null || p.lng===null) return;
     const m = L.marker([p.lat,p.lng],{icon:icona(p.cat), riseOnHover:true}).addTo(map);
     m.on('click', ()=>obreFitxa(i));
     marcadors[i]=m;
@@ -643,7 +698,7 @@ function refrescaMarcadors(){
    pestanya visible (mòbil), queda pendent i s'aplica en obrir Mapa. */
 let pendentCentrat = false;
 function centraMapaEnFiltre(){
-  const pts = PLACES.filter(passaFiltre).map(p=>[p.lat,p.lng]);
+  const pts = PLACES.filter(p=>passaFiltre(p)&&p.lat!==null&&p.lng!==null).map(p=>[p.lat,p.lng]);
   if(!pts.length) return;                       /* res visible: no toquem el mapa */
   if(document.body.classList.contains('view-map')){
     if(pts.length===1) map.flyTo(pts[0], Math.max(map.getZoom(),14), {duration:.6});
@@ -663,6 +718,7 @@ function obreFitxa(i){
   const p = PLACES[i];
   if(!p) return;
   const c = CATS[p.cat]||{emoji:"📍", nom:"Lloc", color:"#888"};
+  const teCoords = p.lat!==null && p.lng!==null;
   document.getElementById('f-emoji').textContent = c.emoji;
   document.getElementById('f-emoji').style.background = c.color;
   document.getElementById('f-nom').textContent = p.nom;
@@ -682,10 +738,10 @@ function obreFitxa(i){
     cos += `<div class="fila"><div class="fic">🧭</div><div><div class="flabel">Trajecte</div><div class="fvalor">${p.origen||"⭕"} ➜ ${p.desti||"⭕"}</div></div></div>`;
   }
   if(p.nota) cos += `<div class="fila"><div class="fic">📝</div><div><div class="flabel">Notes</div><div class="fvalor">${p.nota}</div></div></div>`;
-  cos += `<div class="fila"><div class="fic">📍</div><div><div class="flabel">Ubicació</div><div class="fvalor">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</div></div></div>`;
+  if(teCoords) cos += `<div class="fila"><div class="fic">📍</div><div><div class="flabel">Ubicació</div><div class="fvalor">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</div></div></div>`;
   if(p.link) cos += `<div class="fila"><div class="fic">🔗</div><div style="min-width:0"><div class="flabel">Enllaç</div><div class="fvalor" style="word-break:break-all"><a href="${p.link}" target="_blank" style="color:var(--pri);font-weight:700">${p.link}</a></div></div></div>`;
   document.getElementById('f-cos').innerHTML = cos;
-  let acc = `<a class="f-acc-pri" style="--acc:${c.color}" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}" target="_blank">🧭 Ani-hi</a>`;
+  let acc = teCoords ? `<a class="f-acc-pri" style="--acc:${c.color}" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}" target="_blank">🧭 Ani-hi</a>` : "";
   if(p.link) acc += `<a class="f-acc-sec" href="${p.link}" target="_blank">🌐 Enllaç</a>`;
   acc += `<button class="f-acc-sec" onclick="copiaCoords(${i})">📋 Coordenades</button>`;
   document.getElementById('f-accions').innerHTML = acc;
@@ -808,7 +864,7 @@ function refrescaItinerari(){
 }
 function vesA(i){
   setTab('map');
-  map.flyTo([PLACES[i].lat,PLACES[i].lng],16,{duration:.8});
+  if(PLACES[i].lat!==null && PLACES[i].lng!==null) map.flyTo([PLACES[i].lat,PLACES[i].lng],16,{duration:.8});
   setTimeout(()=>obreFitxa(i), 850);
 }
 window.vesA=vesA;
@@ -948,7 +1004,7 @@ document.getElementById('itinerari').addEventListener('scroll', ()=>{
     if(idx!==null && idx!==ultimIdxSeguit && PLACES[idx]){
       ultimIdxSeguit = idx;
       const p = PLACES[idx];
-      map.panTo([p.lat, p.lng], {animate:true, duration:.5});
+      if(p.lat!==null && p.lng!==null) map.panTo([p.lat, p.lng], {animate:true, duration:.5});
     }
   });
 }, {passive:true});
@@ -976,6 +1032,7 @@ async function sincro(){
   else{
     try{
       const llocs = await carregaPestanyaLlocs();
+      await resolUbicacions(llocs);
       const config = await carregaPestanyaConfig();
       aplicaConfig(config);
       PLACES_SHEET = llocs;
