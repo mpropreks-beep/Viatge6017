@@ -192,7 +192,7 @@ nav button.on{color:var(--pri)}
 #gate button:active{transform:scale(.98)}
 </style>
 <!-- Fitxer d'estils editable per tu (opcional): si existeix, sobreescriu els colors de dalt -->
-<link rel="stylesheet" href="estils.css?v=31">
+<link rel="stylesheet" href="estils.css?v=32">
 </head>
 <body class="view-map">
 
@@ -277,7 +277,7 @@ const SHEET_ID = "1tUIidz7rAFAQPBprGGwYSljTZ0styLm6aFFozYILFAs";
    Cada vegada que publiquis una versió nova a GitHub, canvia aquest
    número. Si el mòbil no mostra el número nou a la capçalera, vol dir
    que està executant una còpia antiga des de la caché.               */
-const VERSIO = "v3.1";
+const VERSIO = "v3.2";
 
 /* ---------- Contrasenya ---------- */
 const PASSWORD = "LaCasita";
@@ -579,9 +579,6 @@ function aplicaConfig(cfg){
 
 /* ---------- Filtratge ----------
    diaFiltre = "tots" o la clau numèrica d'un dia (YYYYMMDD).
-   El desplegable de dies cobreix TOTS els dies naturals des de la
-   primera activitat fins a l'última (inclou dies sense res planejat,
-   i els dies intermedis de les estances d'hotel).
    Els hotels amb inici i fi es mostren si el dia escollit cau dins
    del rang; la resta de categories, si el seu dia d'inici coincideix. */
 function passaFiltre(p){
@@ -635,6 +632,23 @@ function refrescaMarcadors(){
       }
     }
   });
+}
+
+/* ---------- Centrat del mapa segons el filtre ----------
+   En canviar qualsevol filtre, el mapa s'ajusta per encabir tots els
+   llocs resultants (punt mig + zoom automàtic). Si el mapa no és la
+   pestanya visible (mòbil), queda pendent i s'aplica en obrir Mapa. */
+let pendentCentrat = false;
+function centraMapaEnFiltre(){
+  const pts = PLACES.filter(passaFiltre).map(p=>[p.lat,p.lng]);
+  if(!pts.length) return;                       /* res visible: no toquem el mapa */
+  if(document.body.classList.contains('view-map')){
+    if(pts.length===1) map.flyTo(pts[0], Math.max(map.getZoom(),14), {duration:.6});
+    else map.flyToBounds(L.latLngBounds(pts), {padding:[50,50], maxZoom:16, duration:.7});
+    pendentCentrat = false;
+  }else{
+    pendentCentrat = true;                      /* s'aplicarà en anar a Mapa */
+  }
 }
 
 /* ---------- Fitxa de detall amb gestos ---------- */
@@ -775,7 +789,7 @@ function refrescaItinerari(){
         ? `${String(p.inici.hh).padStart(2,"0")}:${String(p.inici.mm).padStart(2,"0")}`
         : (p.diaLegacy && p.diaLegacy.indexOf("·")>0 ? p.diaLegacy.split("·").slice(1).join("·").trim() : "");
       const thoraTxt = hora || c.emoji+" "+(CATS[p.cat]?CATS[p.cat].nom:"");
-      h+=`<div class="tstop" style="--dot:${c.color}">
+      h+=`<div class="tstop" data-i="${i}" style="--dot:${c.color}">
         <div class="thora">${thoraTxt}</div>
         <div class="item" style="margin-bottom:0" onclick="obreFitxa(${i})"><div class="ico">${c.emoji}</div>
           <div style="flex:1;min-width:0"><b>${p.nom}</b>${p.nota?`<p>${p.nota}</p>`:""}</div>
@@ -824,6 +838,7 @@ bTotes.onclick=()=>{
   });
   diaFiltre="tots"; selDia.value="tots";
   refrescaTot();
+  centraMapaEnFiltre();
 };
 fCont.appendChild(bTotes);
 
@@ -836,6 +851,7 @@ Object.entries(CATS).forEach(([k,c])=>{
     if(filtreCat.has(k)){filtreCat.delete(k);b.classList.remove('on');b.style.background='';}
     else{filtreCat.add(k);b.classList.add('on');b.style.background=c.color;}
     refrescaTot();
+    centraMapaEnFiltre();
   };
   fCont.appendChild(b);
 });
@@ -843,7 +859,7 @@ const selDia=document.createElement('select');
 selDia.className='chip';
 selDia.title="Filtra per dia";
 selDia.innerHTML=`<option value="tots">📅 Tots els dies</option>`;
-selDia.onchange=()=>{ diaFiltre=selDia.value; refrescaTot(); };
+selDia.onchange=()=>{ diaFiltre=selDia.value; refrescaTot(); centraMapaEnFiltre(); };
 fCont.appendChild(selDia);
 
 /* El desplegable de dies cobreix el viatge SENCER: un dia per cada
@@ -889,12 +905,51 @@ function setTab(qui){
   document.getElementById('tab-map').classList.toggle('on', qui==='map');
   document.getElementById('tab-llis').classList.toggle('on', qui==='llis');
   document.getElementById('tab-itin').classList.toggle('on', qui==='itin');
+  if(qui==='map'){
+    map.invalidateSize();
+    if(pendentCentrat){ pendentCentrat=false; centraMapaEnFiltre(); }
+  }
 }
 document.getElementById('tab-map').onclick =()=>setTab('map');
 document.getElementById('tab-llis').onclick=()=>setTab('llis');
 document.getElementById('tab-itin').onclick=()=>setTab('itin');
 setTimeout(()=>map.invalidateSize(),100);
 window.addEventListener('resize', ()=>map.invalidateSize());
+
+/* ---------- Scroll de l'itinerari → el mapa segueix ----------
+   En fer scroll dins la pestanya Itinerari, el mapa es desplaça
+   suavament cap al lloc que estàs veient en aquell moment.         */
+let itinScrollTick = false;
+let ultimIdxSeguit = null;
+document.getElementById('itinerari').addEventListener('scroll', ()=>{
+  if(itinScrollTick) return;
+  itinScrollTick = true;
+  requestAnimationFrame(()=>{
+    itinScrollTick = false;
+    if(!document.body.classList.contains('view-itin')) return;
+    if(fitxa.classList.contains('open')) return;      /* no moguem el mapa mentre mires una fitxa */
+    const contenidor = document.getElementById('itinerari').getBoundingClientRect();
+    const referencia = contenidor.top + Math.min(140, contenidor.height*0.3);
+    let idx = null;
+    document.querySelectorAll('#itinerari .tstop[data-i]').forEach(el=>{
+      const r = el.getBoundingClientRect();
+      if(idx===null && r.bottom > referencia) idx = +el.dataset.i;
+    });
+    if(idx===null){
+      const tots = document.querySelectorAll('#itinerari .tstop[data-i]');
+      if(tots.length) idx = +tots[tots.length-1].dataset.i;
+    }
+    if(idx!==null && idx!==ultimIdxSeguit && PLACES[idx]){
+      ultimIdxSeguit = idx;
+      const p = PLACES[idx];
+      map.panTo([p.lat, p.lng], {animate:true, duration:.5});
+    }
+  });
+}, {passive:true});
+/* reinicia el seguiment quan torbes a pujar o canvies de pestanya */
+document.getElementById('itinerari').addEventListener('scroll', ()=>{
+  if(document.getElementById('itinerari').scrollTop < 5) ultimIdxSeguit = null;
+}, {passive:true});
 
 function avisa(html, ms){
   const a=document.getElementById('aviso');
