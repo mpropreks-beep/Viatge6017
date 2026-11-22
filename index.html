@@ -73,10 +73,11 @@ h1 .simbol{display:inline-flex;flex-shrink:0}
 }
 .chip.on{color:#fff;border-color:transparent}
 select.chip{appearance:none;-webkit-appearance:none;font-family:inherit;outline:none;max-width:240px;white-space:nowrap}
-/* ---------- Panells: la visibilitat depèn de la classe del body ---------- */
+/* ---------- Panells: la visibilitat depèn de la classe del body ----------
+   El padding-bottom generós evita que l'últim element quedi tallat. */
 #content{flex:1;position:relative;overflow:hidden}
 #map{position:absolute;top:0;left:0;right:0;bottom:64px;display:none;border-radius:0}
-.main{position:absolute;top:0;left:0;right:0;bottom:64px;overflow-y:auto;padding:4px 14px 28px;display:none}
+.main{position:absolute;top:0;left:0;right:0;bottom:64px;overflow-y:auto;padding:4px 14px 64px;display:none}
 body.view-map  #map{display:block}
 body.view-llis #llistes{display:block}
 body.view-itin #itinerari{display:block}
@@ -192,7 +193,7 @@ nav button.on{color:var(--pri)}
 #gate button:active{transform:scale(.98)}
 </style>
 <!-- Fitxer d'estils editable per tu (opcional): si existeix, sobreescriu els colors de dalt -->
-<link rel="stylesheet" href="estils.css?v=32">
+<link rel="stylesheet" href="estils.css?v=33">
 </head>
 <body class="view-map">
 
@@ -262,7 +263,8 @@ nav button.on{color:var(--pri)}
      Nom, Categoria, Lat, Lng,
      DataInici  (opcional: "29/11/2026 10:00", "29-11-26 15:30",
                  "29 de novembre 10:00"…)
-     DataFi     (opcional: útil sobretot per a hotels)
+     DataFi     (opcional: per a TOTES les categories — mentre un
+                 lloc té inici i fi, es mostra cada dia del rang)
      Origen     (opcional, per a transports: nom d'un altre lloc
                  del full o coordenades "41.39, 2.17")
      Desti      (opcional, per a transports)
@@ -277,7 +279,7 @@ const SHEET_ID = "1tUIidz7rAFAQPBprGGwYSljTZ0styLm6aFFozYILFAs";
    Cada vegada que publiquis una versió nova a GitHub, canvia aquest
    número. Si el mòbil no mostra el número nou a la capçalera, vol dir
    que està executant una còpia antiga des de la caché.               */
-const VERSIO = "v3.2";
+const VERSIO = "v3.3";
 
 /* ---------- Contrasenya ---------- */
 const PASSWORD = "LaCasita";
@@ -579,13 +581,14 @@ function aplicaConfig(cfg){
 
 /* ---------- Filtratge ----------
    diaFiltre = "tots" o la clau numèrica d'un dia (YYYYMMDD).
-   Els hotels amb inici i fi es mostren si el dia escollit cau dins
-   del rang; la resta de categories, si el seu dia d'inici coincideix. */
+   PER A TOTES LES CATEGORIES: si un lloc té DataInici i DataFi,
+   es mostra cada dia del rang (inclusiu). Si només té DataInici,
+   es mostra el dia que coincideix.                                   */
 function passaFiltre(p){
   if(!filtreCat.has(p.cat)) return false;
   if(diaFiltre==="tots") return true;
   const k = Number(diaFiltre);
-  if(p.cat==="hotel" && p.inici && p.fi) return k>=p.inici.key && k<=p.fi.key;
+  if(p.inici && p.fi) return k>=p.inici.key && k<=p.fi.key;
   return p.inici ? p.inici.key===k : false;
 }
 
@@ -670,7 +673,7 @@ function obreFitxa(i){
   const anyRef = new Date().getFullYear();
   if(p.inici){
     cos += `<div class="fila"><div class="fic">📅</div><div><div class="flabel">Inici</div><div class="fvalor" style="font-weight:700;color:${c.color}">${etiquetaCompleta(p.inici, anyRef)}</div></div></div>`;
-    if(p.cat!=="hotel" && p.diaLegacy && !parseDataHora(p.iniciTxt)) cos += `<div class="fila"><div class="fic">ℹ️</div><div><div class="flabel">Detall</div><div class="fvalor">${p.diaLegacy}</div></div></div>`;
+    if(p.diaLegacy && !parseDataHora(p.iniciTxt)) cos += `<div class="fila"><div class="fic">ℹ️</div><div><div class="flabel">Detall</div><div class="fvalor">${p.diaLegacy}</div></div></div>`;
   }else if(p.diaLegacy){
     cos += `<div class="fila"><div class="fic">📅</div><div><div class="flabel">Quan</div><div class="fvalor" style="font-weight:700;color:${c.color}">${p.diaLegacy}</div></div></div>`;
   }
@@ -756,7 +759,10 @@ function refrescaLlistes(){
     if(!llocs.length) return;
     h+=`<div class="cat-title"><span class="dot" style="background:${c.color};color:${c.color}"></span>${c.nom} <small>(${llocs.length})</small></div>`;
     llocs.forEach(({p,i})=>{
-      const dataCurta = p.etq || p.diaLegacy;
+      /* si té rang (inici+fi), la llista ho indica: "29 nov – 1 des" */
+      const dataCurta = (p.inici && p.fi)
+        ? `${p.etq} – ${etiquetaCerta(p.fi)}`
+        : (p.etq || p.diaLegacy);
       h+=`<div class="item" onclick="obreFitxa(${i})"><div class="ico">${c.emoji}</div><div style="flex:1;min-width:0"><b>${p.nom}</b>${p.nota?`<p>${p.nota}</p>`:""}${dataCurta?`<div class="meta">📅 ${dataCurta}</div>`:""}</div><button class="go" onclick="event.stopPropagation();vesA(${i})">🗺️</button></div>`;
     });
   });
@@ -864,7 +870,7 @@ fCont.appendChild(selDia);
 
 /* El desplegable de dies cobreix el viatge SENCER: un dia per cada
    dia natural des de la primera activitat fins a l'última,
-   inclosos els dies intermedis de les estances d'hotel.            */
+   inclosos els dies intermedis de les estades.                     */
 function refrescaDies(){
   const dates=[];
   PLACES.forEach(p=>{
