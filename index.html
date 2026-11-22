@@ -701,9 +701,18 @@ let catsSel = new Set();          /* buit = es mostren totes */
 function catPermesa(k){ return catsSel.size===0 || catsSel.has(k); }
 function refrescaChips(){
   document.querySelectorAll('#filtres .chip[data-k]').forEach(b=>{
-    const k=b.dataset.k;
-    if(catsSel.has(k)){ b.classList.add('on'); b.style.background=CATS[k].color; }
-    else{ b.classList.remove('on'); b.style.background=''; }
+    const k=b.dataset.k, c=CATS[k];
+    if(catsSel.has(k)){
+      b.classList.add('on');
+      b.style.background=c.color;                    /* color fort */
+      b.style.color='#fff';
+      b.style.borderColor='transparent';
+    }else{
+      b.classList.remove('on');
+      b.style.background=`color-mix(in srgb, ${c.color} 30%, transparent)`;  /* mateix color, translúcid */
+      b.style.color=c.color;
+      b.style.borderColor=`color-mix(in srgb, ${c.color} 45%, transparent)`;
+    }
   });
 }
 function passaFiltre(p){
@@ -983,6 +992,7 @@ Object.entries(CATS).forEach(([k,c])=>{
   };
   fCont.appendChild(b);
 });
+refrescaChips();
 const selDia=document.createElement('select');
 selDia.className='chip';
 selDia.title="Filtra per dia";
