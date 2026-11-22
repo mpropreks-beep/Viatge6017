@@ -283,7 +283,7 @@ const SHEET_ID = "1tUIidz7rAFAQPBprGGwYSljTZ0styLm6aFFozYILFAs";
    Cada vegada que publiquis una versió nova a GitHub, canvia aquest
    número. Si el mòbil no mostra el número nou a la capçalera, vol dir
    que està executant una còpia antiga des de la caché.               */
-const VERSIO = "v3.4";
+const VERSIO = "v3.5";
 
 /* ---------- Contrasenya ---------- */
 const PASSWORD = "LaCasita";
@@ -387,11 +387,40 @@ function geocodifica(adreca){
     });
   });
 }
+/* resol un link curt (maps.app.goo.gl/...) seguint la redirecció via
+   un servei intermediari, i extreu-hi les coordenades */
+async function resolLinkCurt(url){
+  const clau = "curt:"+url;
+  const cau = geoCauGet(clau);
+  if(cau) return cau;
+  const intents = [
+    "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
+    "https://corsproxy.io/?" + encodeURIComponent(url)
+  ];
+  for(const u of intents){
+    try{
+      const r = await fetch(u);
+      const txt = await r.text();
+      let m = txt.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+      if(!m) m = txt.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+      if(m){
+        const v = [parseFloat(m[1]), parseFloat(m[2])];
+        if(isFinite(v[0]) && isFinite(v[1])){ geoCauSet(clau, v); return v; }
+      }
+    }catch(e){}
+  }
+  return null;
+}
 async function resolUbicacions(llistat){
   for(const p of llistat){
+    if(p.lat!==null && p.lng===null) {}
     if(p.lat!==null && p.lng!==null) continue;
     const delLink = coordsDeMapsLink(p.mapsTxt);
     if(delLink){ p.lat=delLink[0]; p.lng=delLink[1]; continue; }
+    if(p.mapsTxt && /goo\.gl|maps\.app/i.test(p.mapsTxt)){
+      const g = await resolLinkCurt(p.mapsTxt.trim());
+      if(g){ p.lat=g[0]; p.lng=g[1]; continue; }
+    }
     if(p.adrecaTxt){
       const g = await geocodifica(p.adrecaTxt);
       if(g){ p.lat=g[0]; p.lng=g[1]; }
@@ -639,8 +668,17 @@ function aplicaConfig(cfg){
    PER A TOTES LES CATEGORIES: si un lloc té DataInici i DataFi,
    es mostra cada dia del rang (inclusiu). Si només té DataInici,
    es mostra el dia que coincideix.                                   */
+let catsSel = new Set();          /* buit = es mostren totes */
+function catPermesa(k){ return catsSel.size===0 || catsSel.has(k); }
+function refrescaChips(){
+  document.querySelectorAll('#filtres .chip[data-k]').forEach(b=>{
+    const k=b.dataset.k;
+    if(catsSel.has(k)){ b.classList.add('on'); b.style.background=CATS[k].color; }
+    else{ b.classList.remove('on'); b.style.background=''; }
+  });
+}
 function passaFiltre(p){
-  if(!filtreCat.has(p.cat)) return false;
+  if(!catPermesa(p.cat)) return false;
   if(diaFiltre==="tots") return true;
   const k = Number(diaFiltre);
   if(p.inici && p.fi) return k>=p.inici.key && k<=p.fi.key;
@@ -893,11 +931,8 @@ bTotes.className='chip on';
 bTotes.textContent='✨ Tot';
 bTotes.title="Mostra totes les categories i tots els dies";
 bTotes.onclick=()=>{
-  filtreCat = new Set(Object.keys(CATS));
-  document.querySelectorAll('#filtres .chip[data-k]').forEach(b=>{
-    b.classList.add('on');
-    b.style.background = CATS[b.dataset.k].color;
-  });
+  catsSel.clear();
+  refrescaChips();
   diaFiltre="tots"; selDia.value="tots";
   refrescaTot();
   centraMapaEnFiltre();
@@ -906,12 +941,14 @@ fCont.appendChild(bTotes);
 
 Object.entries(CATS).forEach(([k,c])=>{
   const b=document.createElement('button');
-  b.className='chip on'; b.style.background=c.color;
+  b.className='chip';
   b.textContent=`${c.emoji} ${c.nom}`;
   b.dataset.k=k;
+  b.title="Selecciona per mostrar només aquesta categoria; en selecciona més d'una per combinar-les";
   b.onclick=()=>{
-    if(filtreCat.has(k)){filtreCat.delete(k);b.classList.remove('on');b.style.background='';}
-    else{filtreCat.add(k);b.classList.add('on');b.style.background=c.color;}
+    if(catsSel.has(k)) catsSel.delete(k);
+    else catsSel.add(k);
+    refrescaChips();
     refrescaTot();
     centraMapaEnFiltre();
   };
