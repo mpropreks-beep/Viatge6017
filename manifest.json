@@ -1,0 +1,11 @@
+{
+  "name": "Mapa del Viatge",
+  "short_name": "Viatge",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f1fc",
+  "theme_color": "#6d4aff",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
