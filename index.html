@@ -1226,10 +1226,36 @@ function marcaAutoritzat(){
     });
   }
 })();
-/* PWA offline: registra el service worker que guarda l'app al telèfon */
+/* PWA: registra el service worker i comprova si n'hi ha una versió nova.
+   Es torna a comprovar en recuperar la connexió i en tornar a obrir l'app. */
 if('serviceWorker' in navigator){
-  window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  const sw = navigator.serviceWorker;
+  let jaTeControlador = !!sw.controller;
+  let recarregaPerActualitzacio = false;
+
+  async function registraIComprovaActualitzacio(){
+    try{
+      const registre = await sw.register('./sw.js');
+      await registre.update();
+    }catch(e){
+      console.warn('[Viatge] No s’ha pogut comprovar l’actualització de l’app:', e);
+    }
+  }
+
+  // Si ja hi havia una versió controlant la pàgina, recarreguem una sola
+  // vegada quan la nova versió passa a controlar-la.
+  sw.addEventListener('controllerchange', ()=>{
+    if(jaTeControlador && !recarregaPerActualitzacio){
+      recarregaPerActualitzacio = true;
+      window.location.reload();
+    }
+    jaTeControlador = true;
+  });
+
+  window.addEventListener('load', registraIComprovaActualitzacio);
+  window.addEventListener('online', registraIComprovaActualitzacio);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible') registraIComprovaActualitzacio();
   });
 }
 </script>
