@@ -204,6 +204,12 @@ nav button.on{color:var(--pri)}
 #splash .slogo{position:relative;z-index:2;background:rgba(255,255,255,.65);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.75);box-shadow:0 10px 30px rgba(34,26,68,.18)}
 #splash .stxt{position:relative;z-index:2}
 #splash .spin{position:relative;z-index:2}
+/* Ajust de posició de la pantalla inicial en mòbils */
+@media (max-width: 600px){
+#splash > .slogo,
+#splash > .stxt,
+#splash > .spin{  top: 48px;  }
+}
 </style>
 <!-- Icona d'app per a pantalla d'inici (iPhone/Android) -->
 <link rel="apple-touch-icon" href="icon.png">
