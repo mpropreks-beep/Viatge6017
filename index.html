@@ -302,10 +302,17 @@ const SHEET_ID = "1tUIidz7rAFAQPBprGGwYSljTZ0styLm6aFFozYILFAs";
    que està executant una còpia antiga des de la caché.               */
 const VERSIO = "v4.0";
 
-/* ---------- Contrasenya ---------- */
-const PASSWORD = "LaCasita";
-const AUTH_KEY = "viatge_auth_v1";
+/* ---------- Contrasenya des de Google Sheets ---------- */
+let PASSWORD = "";
+const AUTH_KEY = "viatge_auth_v2";
 const AUTH_DIES = 30;
+
+async function hashContrasenya(valor){
+  const dades = new TextEncoder().encode(valor);
+  const hash = await crypto.subtle.digest("SHA-256", dades);
+  return Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2,"0")).join("");
+}
 
 /* ---------- Símbol de l'app: cabdell de llana vermell sobre bandera blanca ---------- */
 function simbolSVG(mida){
@@ -1165,7 +1172,10 @@ async function sincro(){
       aplicaConfig(config);
       PLACES_SHEET = llocs;
       localStorage.setItem(LS_CACHE, JSON.stringify(llocs));
-      localStorage.setItem(LS_CONFIG, JSON.stringify(config));
+      const configPublica = {...config};
+      delete configPublica.contrasenya;
+      delete configPublica.password;
+      localStorage.setItem(LS_CONFIG, JSON.stringify(configPublica));      
       map.setView(CONFIG.centre, CONFIG.zoom);
       ok = true;
     }catch(e){
@@ -1190,42 +1200,86 @@ async function sincro(){
 }
 
 /* ---------- Porta de contrasenya ---------- */
-function jaAutoritzat(){
+
+function autoritzacioGuardada(){
   try{
     const a = JSON.parse(localStorage.getItem(AUTH_KEY)||"null");
-    return a && a.tok===btoa(PASSWORD) && Date.now() < a.exp;
-  }catch(e){ return false; }
+    return a && Date.now() < a.exp ? a : null;
+  }catch(e){
+    return null;
+  }
 }
-function marcaAutoritzat(){
+
+async function jaAutoritzat(){
+  const a = autoritzacioGuardada();
+  if(!a) return false;
+
+  // Si no hi ha connexió, es respecta l'autorització anterior.
+  if(!PASSWORD) return true;
+
+  return a.hash === await hashContrasenya(PASSWORD);
+}
+
+async function marcaAutoritzat(){
   localStorage.setItem(AUTH_KEY, JSON.stringify({
-    tok: btoa(PASSWORD),
+    hash: await hashContrasenya(PASSWORD),
     exp: Date.now() + AUTH_DIES*24*60*60*1000
   }));
 }
-(function iniciaGate(){
-  const gate=document.getElementById('gate');
-  if(jaAutoritzat()){
-    sincro();
-  }else{
-    amagaSplash();
-    gate.style.display='flex';
-    document.getElementById('g-btn').onclick = ()=>{
-      const v = document.getElementById('g-pass').value.trim();
-      if(v === PASSWORD){
-        marcaAutoritzat();
-        gate.style.display='none';
-        mostraSplash();
-        sincro();
-      }else{
-        document.getElementById('g-err').style.display='block';
-        document.getElementById('g-pass').value='';
-      }
-    };
-    document.getElementById('g-pass').addEventListener('keydown', e=>{
-      if(e.key==='Enter') document.getElementById('g-btn').click();
-    });
+
+async function iniciaGate(){
+  const gate = document.getElementById('gate');
+
+  // Llegim la contrasenya directament de la pestanya Config.
+  if(navigator.onLine){
+    try{
+      const config = await carregaPestanyaConfig();
+      PASSWORD = String(config?.contrasenya || "").trim();
+    }catch(e){
+      PASSWORD = "";
+    }
   }
-})();
+
+  if(await jaAutoritzat()){
+    sincro();
+    return;
+  }
+
+  amagaSplash();
+  gate.style.display = 'flex';
+
+  const error = document.getElementById('g-err');
+  const camp = document.getElementById('g-pass');
+
+  document.getElementById('g-btn').onclick = async ()=>{
+    if(!PASSWORD){
+      error.textContent = "No s'ha pogut llegir la contrasenya de Config. Comprova la connexió.";
+      error.style.display = 'block';
+      return;
+    }
+
+    const valor = camp.value.trim();
+
+    if(valor === PASSWORD){
+      await marcaAutoritzat();
+      gate.style.display = 'none';
+      mostraSplash();
+      sincro();
+    }else{
+      error.textContent = "Contrasenya incorrecta, torna-ho a provar.";
+      error.style.display = 'block';
+      camp.value = '';
+    }
+  };
+
+  camp.addEventListener('keydown', e=>{
+    if(e.key === 'Enter'){
+      document.getElementById('g-btn').click();
+    }
+  });
+}
+
+iniciaGate();
 /* PWA: registra el service worker i comprova si n'hi ha una versió nova.
    Es torna a comprovar en recuperar la connexió i en tornar a obrir l'app. */
 if('serviceWorker' in navigator){
