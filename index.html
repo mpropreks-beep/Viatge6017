@@ -292,7 +292,7 @@ const SHEET_ID = "1tUIidz7rAFAQPBprGGwYSljTZ0styLm6aFFozYILFAs";
    Cada vegada que publiquis una versió nova a GitHub, canvia aquest
    número. Si el mòbil no mostra el número nou a la capçalera, vol dir
    que està executant una còpia antiga des de la caché.               */
-const VERSIO = "v3.9";
+const VERSIO = "v4.0";
 
 /* ---------- Contrasenya ---------- */
 const PASSWORD = "LaCasita";
@@ -316,6 +316,20 @@ function simbolSVG(mida){
   document.head.appendChild(fav);
 })();
 document.getElementById('splash-logo').innerHTML = simbolSVG(64);
+/* Splash rotativa: gos / cartell / cabdells com a fons, logo per sobre */
+(function(){
+  const FOTOS=["gos.png","cartell.png","cabdells.png"];
+  const tria=FOTOS[Math.floor(Math.random()*FOTOS.length)]+"?v=40";
+  const sp=document.getElementById('splash');
+  if(sp && !sp.querySelector('.sfoto')){
+    const f=document.createElement('div');
+    f.className='sfoto';
+    f.innerHTML='<img src="'+tria+'" alt="">';
+    const v=document.createElement('div');
+    v.className='svel';
+    sp.prepend(v); sp.prepend(f);
+  }
+})();
 document.getElementById('h-simbol').innerHTML = simbolSVG(20);
 
 /* ---------- Categories fixes ----------
@@ -1111,7 +1125,12 @@ function avisa(html, ms){
   if(ms) setTimeout(()=>a.style.display='none',ms);
 }
 
-/* ---------- Pantalla de càrrega ---------- */
+/* Pantalla de càrrega — fons il·lustrat rotatiu */
+#splash .sfoto{position:absolute;inset:0;z-index:-2}
+#splash .sfoto img{width:100%;height:100%;object-fit:cover}
+#splash .svel{position:absolute;inset:0;z-index:-1;background:linear-gradient(rgba(255,255,255,.5),rgba(255,255,255,.12))}
+#splash .slogo{background:rgba(255,255,255,.65);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.75);box-shadow:0 10px 30px rgba(34,26,68,.18)}
+/* Pantalla de càrrega */
 const splash=document.getElementById('splash');
 function mostraSplash(){ splash.classList.remove('amaga'); }
 function amagaSplash(){ splash.classList.add('amaga'); }
