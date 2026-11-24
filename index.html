@@ -292,7 +292,7 @@ const SHEET_ID = "1tUIidz7rAFAQPBprGGwYSljTZ0styLm6aFFozYILFAs";
    Cada vegada que publiquis una versió nova a GitHub, canvia aquest
    número. Si el mòbil no mostra el número nou a la capçalera, vol dir
    que està executant una còpia antiga des de la caché.               */
-const VERSIO = "v3.8";
+const VERSIO = "v3.9";
 
 /* ---------- Contrasenya ---------- */
 const PASSWORD = "LaCasita";
@@ -1190,6 +1190,12 @@ function marcaAutoritzat(){
     });
   }
 })();
+/* PWA offline: registra el service worker que guarda l'app al telèfon */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
