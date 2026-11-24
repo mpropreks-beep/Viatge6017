@@ -36,7 +36,7 @@ body{
 }
 /* ---------- Pantalla de càrrega ---------- */
 #splash{
-  position:fixed;inset:0;z-index:6000;
+  position:fixed;inset:0;z-index:6000;isolation:isolate;
   background:linear-gradient(160deg,#f6f3ff 0%,#fdf1f6 55%,#eff8f7 100%);
   display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;
   transition:opacity .45s ease;
@@ -47,8 +47,8 @@ body{
   background:rgba(255,255,255,.7);
   box-shadow:0 14px 40px rgba(109,74,255,.28);
 }
-#splash .stxt{font-size:15px;font-weight:700;color:var(--muted)}
-#splash .spin{width:26px;height:26px;border-radius:50%;border:3px solid rgba(109,74,255,.2);border-top-color:var(--pri);animation:giro 1s linear infinite}
+#splash .stxt{position:relative;z-index:2;font-size:15px;font-weight:700;color:var(--muted)}
+#splash .spin{position:relative;z-index:2;width:26px;height:26px;border-radius:50%;border:3px solid rgba(109,74,255,.2);border-top-color:var(--pri);animation:giro 1s linear infinite}
 @keyframes giro{to{transform:rotate(360deg)}}
 /* ---------- Capçalera aurora ---------- */
 /* ---------- Capçalera: barra fina única ---------- */
@@ -196,6 +196,14 @@ nav button.on{color:var(--pri)}
 #gate button{width:100%;margin-top:14px;border:none;background:linear-gradient(135deg,#6d4aff,#a46bff);color:#fff;border-radius:14px;
   padding:13px;font-size:15.5px;font-weight:800;cursor:pointer;box-shadow:0 6px 18px rgba(109,74,255,.4)}
 #gate button:active{transform:scale(.98)}
+
+/* Pantalla de càrrega — fons il·lustrat rotatiu */
+#splash .sfoto{position:absolute;inset:0;z-index:0}
+#splash .sfoto img{width:100%;height:100%;object-fit:cover}
+#splash .svel{position:absolute;inset:0;z-index:1;background:linear-gradient(rgba(255,255,255,.5),rgba(255,255,255,.12))}
+#splash .slogo{position:relative;z-index:2;background:rgba(255,255,255,.65);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.75);box-shadow:0 10px 30px rgba(34,26,68,.18)}
+#splash .stxt{position:relative;z-index:2}
+#splash .spin{position:relative;z-index:2}
 </style>
 <!-- Icona d'app per a pantalla d'inici (iPhone/Android) -->
 <link rel="apple-touch-icon" href="icon.png">
@@ -374,6 +382,13 @@ function normalitzaCat(v){
   return CATS[s] ? s : null;
 }
 function num(v){ const n=parseFloat(String(v).replace(",",".")); return isNaN(n)?null:n; }
+function escHTML(v){ return String(v ?? "").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function urlSegura(v){
+  const raw=String(v ?? "").trim();
+  if(!raw) return "";
+  try{ const u=new URL(raw, location.href); return ["http:","https:","mailto:","tel:"].includes(u.protocol) ? u.href : ""; }
+  catch(e){ return ""; }
+}
 
 /* ---------- v3.4: ubicació per link de Google Maps o adreça ---------- */
 function coordsDeMapsLink(txt){
@@ -384,7 +399,7 @@ function coordsDeMapsLink(txt){
   if(!m) m = t.match(/[?&]q=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
   if(m){
     const la = parseFloat(m[1]), ln = parseFloat(m[2]);
-    if(isFinite(la) && isFinite(ln)) return [la,ln];
+    if(isFinite(la) && isFinite(ln) && Math.abs(la)<=90 && Math.abs(ln)<=180) return [la,ln];
   }
   return null;
 }
@@ -611,7 +626,8 @@ function construeixPlace(raw){
   if(!raw.nom || !raw.cat) return null;
   const p = {
     nom:raw.nom, cat:raw.cat,
-    lat:raw.lat ?? null, lng:raw.lng ?? null,
+    lat:(raw.lat!==null && raw.lat!==undefined && raw.lat!=="" && Math.abs(raw.lat)<=90) ? raw.lat : null,
+    lng:(raw.lng!==null && raw.lng!==undefined && raw.lng!=="" && Math.abs(raw.lng)<=180) ? raw.lng : null,
     mapsTxt:(raw.maps||"").trim(),
     adrecaTxt:(raw.adreca||"").trim(),
     diaLegacy:(raw.dia||"").trim(),
@@ -828,29 +844,32 @@ function obreFitxa(i){
   const anyRef = new Date().getFullYear();
   if(p.inici){
     cos += `<div class="fila"><div class="fic">📅</div><div><div class="flabel">Inici</div><div class="fvalor" style="font-weight:700;color:${c.color}">${etiquetaCompleta(p.inici, anyRef)}</div></div></div>`;
-    if(p.diaLegacy && !parseDataHora(p.iniciTxt)) cos += `<div class="fila"><div class="fic">ℹ️</div><div><div class="flabel">Detall</div><div class="fvalor">${p.diaLegacy}</div></div></div>`;
+    if(p.diaLegacy && !parseDataHora(p.iniciTxt)) cos += `<div class="fila"><div class="fic">ℹ️</div><div><div class="flabel">Detall</div><div class="fvalor">${escHTML(p.diaLegacy)}</div></div></div>`;
   }else if(p.diaLegacy){
-    cos += `<div class="fila"><div class="fic">📅</div><div><div class="flabel">Quan</div><div class="fvalor" style="font-weight:700;color:${c.color}">${p.diaLegacy}</div></div></div>`;
+    cos += `<div class="fila"><div class="fic">📅</div><div><div class="flabel">Quan</div><div class="fvalor" style="font-weight:700;color:${c.color}">${escHTML(p.diaLegacy)}</div></div></div>`;
   }
   if(p.fi) cos += `<div class="fila"><div class="fic">🏁</div><div><div class="flabel">Fins</div><div class="fvalor" style="font-weight:700;color:${c.color}">${etiquetaCompleta(p.fi, anyRef)}</div></div></div>`;
   if(p.cat==="transport" && (p.origen||p.desti)){
-    cos += `<div class="fila"><div class="fic">🧭</div><div><div class="flabel">Trajecte</div><div class="fvalor">${p.origen||"⭕"} ➜ ${p.desti||"⭕"}</div></div></div>`;
+    cos += `<div class="fila"><div class="fic">🧭</div><div><div class="flabel">Trajecte</div><div class="fvalor">${escHTML(p.origen||"⭕")} ➜ ${escHTML(p.desti||"⭕")}</div></div></div>`;
   }
-  if(p.nota) cos += `<div class="fila"><div class="fic">📝</div><div><div class="flabel">Notes</div><div class="fvalor">${p.nota}</div></div></div>`;
+  if(p.nota) cos += `<div class="fila"><div class="fic">📝</div><div><div class="flabel">Notes</div><div class="fvalor">${escHTML(p.nota)}</div></div></div>`;
   if(teCoords) cos += `<div class="fila"><div class="fic">📍</div><div><div class="flabel">Ubicació</div><div class="fvalor">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</div></div></div>`;
-  if(p.link) cos += `<div class="fila"><div class="fic">🔗</div><div style="min-width:0"><div class="flabel">Enllaç</div><div class="fvalor" style="word-break:break-all"><a href="${p.link}" target="_blank" style="color:var(--pri);font-weight:700">${p.link}</a></div></div></div>`;
+  if(p.link){ const href=urlSegura(p.link); cos += `<div class="fila"><div class="fic">🔗</div><div style="min-width:0"><div class="flabel">Enllaç</div><div class="fvalor" style="word-break:break-all">${href?`<a href="${escHTML(href)}" target="_blank" rel="noopener noreferrer" style="color:var(--pri);font-weight:700">${escHTML(p.link)}</a>`:escHTML(p.link)}</div></div></div>`; }
   document.getElementById('f-cos').innerHTML = cos;
   let acc = teCoords ? `<a class="f-acc-pri" style="--acc:${c.color}" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}" target="_blank">🧭 Ani-hi</a>` : "";
-  if(p.link) acc += `<a class="f-acc-sec" href="${p.link}" target="_blank">🌐 Enllaç</a>`;
-  acc += `<button class="f-acc-sec" onclick="copiaCoords(${i})">📋 Coordenades</button>`;
+  const href=urlSegura(p.link);
+  if(href) acc += `<a class="f-acc-sec" href="${escHTML(href)}" target="_blank" rel="noopener noreferrer">🌐 Enllaç</a>`;
+  if(teCoords) acc += `<button class="f-acc-sec" onclick="copiaCoords(${i})">📋 Coordenades</button>`;
   document.getElementById('f-accions').innerHTML = acc;
   fitxa.classList.add('open');
   fitxa.classList.remove('expans');
   fFull.scrollTop = 0;
   fFull.classList.remove('anim'); void fFull.offsetWidth; fFull.classList.add('anim');
-  const centre = map.getCenter();
-  if(Math.abs(centre.lat-p.lat)>1e-4 || Math.abs(centre.lng-p.lng)>1e-4){
-    map.flyTo([p.lat,p.lng], Math.max(map.getZoom()||13, 15), {duration:.6});
+  if(teCoords){
+    const centre = map.getCenter();
+    if(Math.abs(centre.lat-p.lat)>1e-4 || Math.abs(centre.lng-p.lng)>1e-4){
+      map.flyTo([p.lat,p.lng], Math.max(map.getZoom()||13, 15), {duration:.6});
+    }
   }
 }
 function tancaFitxa(){ fitxa.classList.remove('open','expans'); fFull.style.transform=""; }
@@ -880,12 +899,14 @@ fFull.addEventListener('touchend', ()=>{
   dragActiu=false; dragY=null; fFull.style.transform="";
 }, {passive:true});
 
-window.copiaCoords = function(i){
+window.copiaCoords = async function(i){
   const p = PLACES[i];
-  navigator.clipboard?.writeText(`${p.lat}, ${p.lng}`).then(
-    ()=>alert("Coordenades copiades ✅"),
-    ()=>{}
-  );
+  if(!p || p.lat===null || p.lng===null) return;
+  try{
+    if(!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+    await navigator.clipboard.writeText(`${p.lat}, ${p.lng}`);
+    alert("Coordenades copiades ✅");
+  }catch(e){ alert("No s'han pogut copiar les coordenades en aquest navegador."); }
 };
 
 /* ---------- Ordenació cronològica ---------- */
@@ -918,7 +939,7 @@ function refrescaLlistes(){
       const dataCurta = (p.inici && p.fi)
         ? `${p.etq} – ${etiquetaCerta(p.fi)}`
         : (p.etq || p.diaLegacy);
-      h+=`<div class="item" onclick="obreFitxa(${i})"><div class="ico">${c.emoji}</div><div style="flex:1;min-width:0"><b>${p.nom}</b>${p.nota?`<p>${p.nota}</p>`:""}${dataCurta?`<div class="meta">📅 ${dataCurta}</div>`:""}</div><button class="go" onclick="event.stopPropagation();vesA(${i})">🗺️</button></div>`;
+      h+=`<div class="item" onclick="obreFitxa(${i})"><div class="ico">${c.emoji}</div><div style="flex:1;min-width:0"><b>${escHTML(p.nom)}</b>${p.nota?`<p>${escHTML(p.nota)}</p>`:""}${dataCurta?`<div class="meta">📅 ${dataCurta}</div>`:""}</div><button class="go" onclick="event.stopPropagation();vesA(${i})">🗺️</button></div>`;
     });
   });
   document.getElementById('llistes').innerHTML = h || `<p style="text-align:center;color:var(--muted);margin-top:40px">Cap lloc amb els filtres actius 🙂</p>`;
@@ -951,9 +972,9 @@ function refrescaItinerari(){
         : (p.diaLegacy && p.diaLegacy.indexOf("·")>0 ? p.diaLegacy.split("·").slice(1).join("·").trim() : "");
       const thoraTxt = hora || c.emoji+" "+(CATS[p.cat]?CATS[p.cat].nom:"");
       h+=`<div class="tstop" data-i="${i}" style="--dot:${c.color}">
-        <div class="thora">${thoraTxt}</div>
+        <div class="thora">${escHTML(thoraTxt)}</div>
         <div class="item" style="margin-bottom:0" onclick="obreFitxa(${i})"><div class="ico">${c.emoji}</div>
-          <div style="flex:1;min-width:0"><b>${p.nom}</b>${p.nota?`<p>${p.nota}</p>`:""}</div>
+          <div style="flex:1;min-width:0"><b>${escHTML(p.nom)}</b>${p.nota?`<p>${escHTML(p.nota)}</p>`:""}</div>
           <button class="go" onclick="event.stopPropagation();vesA(${i})">🗺️</button></div>
       </div>`;
     });
@@ -1126,10 +1147,6 @@ function avisa(html, ms){
 }
 
 /* Pantalla de càrrega — fons il·lustrat rotatiu */
-#splash .sfoto{position:absolute;inset:0;z-index:-2}
-#splash .sfoto img{width:100%;height:100%;object-fit:cover}
-#splash .svel{position:absolute;inset:0;z-index:-1;background:linear-gradient(rgba(255,255,255,.5),rgba(255,255,255,.12))}
-#splash .slogo{background:rgba(255,255,255,.65);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.75);box-shadow:0 10px 30px rgba(34,26,68,.18)}
 /* Pantalla de càrrega */
 const splash=document.getElementById('splash');
 function mostraSplash(){ splash.classList.remove('amaga'); }
@@ -1164,7 +1181,7 @@ async function sincro(){
       teniaCau = PLACES_SHEET.length>0;
     }catch(e2){ PLACES_SHEET=[]; }
     if(!PLACES_SHEET.length) PLACES_SHEET=PLACES_EXEMPLE;
-    avisa(`⚠️ No s'ha pogut sincronitzar amb Google Sheets${motiu?`<br><small style="font-weight:500">Motiu: ${motiu}</small>`:""}<br><small style="font-weight:500">${teniaCau?"Es mostren les dades de l'última sincronització.":"Cap cau: es mostra l'exemple."}</small>`, 12000);
+    avisa(`⚠️ No s'ha pogut sincronitzar amb Google Sheets${motiu?`<br><small style="font-weight:500">Motiu: ${escHTML(motiu)}</small>`:""}<br><small style="font-weight:500">${teniaCau?"Es mostren les dades de l'última sincronització.":"Cap cau: es mostra l'exemple."}</small>`, 12000);
   }
   PLACES = [...PLACES_SHEET];
   refrescaDies();
