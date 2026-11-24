@@ -1,13 +1,16 @@
 /* Service worker de l'app Viatge — guarda l'app al telèfon per funcionar offline.
    IMPORTANT: quan publiquis una versió nova de l'app, canvia "v39" aquí
    per un número nou (v40, v41...) perquè la caché es regeneri. */
-const CACHE = "viatge-pwa-v39";
+const CACHE = "viatge-pwa-v40";
 const PRECACHE = [
   "./",
   "index.html",
   "estils.css",
   "manifest.json",
   "icon.png",
+  "gos.png",
+  "cartell.png",
+  "cabdells.png",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
 ];
